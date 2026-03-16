@@ -64,6 +64,12 @@ def _validate_environment(settings: Settings) -> None:
         )
     log.debug("incoming_root OK: %s", settings.paths.incoming_root)
 
+    if not settings.beets.beetsdir.is_dir():
+        raise RuntimeError(
+            f"beets beetsdir does not exist or is not a directory: {settings.beets.beetsdir}"
+        )
+    log.debug("beets beetsdir OK: %s", settings.beets.beetsdir)
+
     if not settings.beets.config_file.is_file():
         raise RuntimeError(f"beets config_file does not exist: {settings.beets.config_file}")
     log.debug("beets config_file OK: %s", settings.beets.config_file)

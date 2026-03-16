@@ -49,6 +49,21 @@ def test_validate_environment_raises_when_incoming_root_missing(tmp_path: Path) 
         _validate_environment(settings)
 
 
+def test_validate_environment_raises_when_beetsdir_missing(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path)
+    settings.beets = BeetsConfig(
+        executable="beet",
+        beetsdir=tmp_path / "nonexistent",
+        config_file=tmp_path / "beets" / "config.yaml",
+        timeout_seconds=30,
+    )
+    with (
+        patch("shutil.which", return_value="/usr/bin/beet"),
+        pytest.raises(RuntimeError, match="beets beetsdir does not exist"),
+    ):
+        _validate_environment(settings)
+
+
 def test_validate_environment_raises_when_beets_config_missing(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path)
     settings.beets = BeetsConfig(
