@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-# Accept the selected beets release match non-interactively during import.
-BEETS_IMPORT_ACCEPT_ALL_INPUT = "A\n"
+from music_ingest.domain.enums import DuplicateAction
+
+# Keystroke sent to the beets duplicate resolution prompt per action.
+_DUPLICATE_KEYSTROKE: dict[DuplicateAction, str] = {
+    DuplicateAction.SKIP: "S",
+    DuplicateAction.REMOVE: "R",
+}
 
 
 @dataclass(slots=True, frozen=True)
@@ -43,36 +48,54 @@ class BeetsRunner:
     def build_preview_as_is(self, album_dir: Path) -> BeetsCommand:
         return self._build_command("import", "--pretend", "-A", str(album_dir))
 
-    def build_run_as_is(self, album_dir: Path) -> BeetsCommand:
-        return self._build_command("import", "-A", str(album_dir))
+    def build_run_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction = DuplicateAction.ABORT
+    ) -> BeetsCommand:
+        keystroke = _DUPLICATE_KEYSTROKE.get(duplicate_action)
+        input_text = f"{keystroke}\n" if keystroke else None
+        return self._build_command("import", "-A", str(album_dir), input_text=input_text)
 
     def build_preview_release(self, album_dir: Path, release_ref: str) -> BeetsCommand:
         return self._build_command(
             "import", "--pretend", "--search-id", release_ref, str(album_dir)
         )
 
-    def build_run_release(self, album_dir: Path, release_ref: str) -> BeetsCommand:
+    def build_run_release(
+        self,
+        album_dir: Path,
+        release_ref: str,
+        duplicate_action: DuplicateAction = DuplicateAction.ABORT,
+    ) -> BeetsCommand:
+        keystroke = _DUPLICATE_KEYSTROKE.get(duplicate_action)
+        input_text = f"A\n{keystroke}\n" if keystroke else "A\n"
         return self._build_command(
             "import",
             "--search-id",
             release_ref,
             str(album_dir),
-            input_text=BEETS_IMPORT_ACCEPT_ALL_INPUT,
+            input_text=input_text,
         )
 
     def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
         return self.execute(self.build_preview_as_is(album_dir))
 
-    def run_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
-        return self.execute(self.build_run_as_is(album_dir))
+    def run_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction = DuplicateAction.ABORT
+    ) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_run_as_is(album_dir, duplicate_action))
 
     def preview_release(
         self, album_dir: Path, release_ref: str
     ) -> subprocess.CompletedProcess[str]:
         return self.execute(self.build_preview_release(album_dir, release_ref))
 
-    def run_release(self, album_dir: Path, release_ref: str) -> subprocess.CompletedProcess[str]:
-        return self.execute(self.build_run_release(album_dir, release_ref))
+    def run_release(
+        self,
+        album_dir: Path,
+        release_ref: str,
+        duplicate_action: DuplicateAction = DuplicateAction.ABORT,
+    ) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_run_release(album_dir, release_ref, duplicate_action))
 
     def execute(self, command: BeetsCommand) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
