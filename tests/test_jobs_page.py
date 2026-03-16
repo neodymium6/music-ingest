@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from music_ingest.domain import Job, JobMode, JobStatus
+from music_ingest.domain import DuplicateAction, Job, JobMode, JobStatus
 from music_ingest.ui.pages.jobs import _prune_expansion_state
 
 
@@ -14,6 +14,7 @@ def test_prune_expansion_state_removes_entries_for_absent_jobs() -> None:
             album_dir=Path("/music/incoming/A/One"),
             mode=JobMode.AS_IS,
             release_ref=None,
+            duplicate_action=DuplicateAction.ABORT,
             status=JobStatus.FAILED,
             created_at=datetime.now(timezone.utc),
         ),
@@ -22,6 +23,7 @@ def test_prune_expansion_state_removes_entries_for_absent_jobs() -> None:
             album_dir=Path("/music/incoming/B/Two"),
             mode=JobMode.RELEASE,
             release_ref="release-id",
+            duplicate_action=DuplicateAction.ABORT,
             status=JobStatus.SUCCEEDED,
             created_at=datetime.now(timezone.utc),
         ),
