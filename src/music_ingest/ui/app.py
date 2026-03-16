@@ -153,5 +153,6 @@ def run_ui(settings: Settings) -> None:
         port=settings.app.port,
         title=settings.app.title,
         reload=False,
+        favicon="💿",
         storage_secret="music-ingest",
     )
