@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from music_ingest.domain import JobMode, JobStatus
+from music_ingest.domain import DuplicateAction, JobMode, JobStatus
 from music_ingest.infra.db import (
     SCHEMA_VERSION,
     create_job,
@@ -18,6 +18,7 @@ from music_ingest.infra.db import (
     record_job_preview,
     set_job_failed,
     set_job_running,
+    set_job_skipped,
     set_job_succeeded,
 )
 
@@ -345,6 +346,125 @@ def test_open_db_rejects_existing_unversioned_jobs_table(tmp_path: Path) -> None
 
     with pytest.raises(RuntimeError, match="schema version 0"):
         open_db(db_path)
+
+
+def test_create_job_defaults_duplicate_action_to_abort(connection: sqlite3.Connection) -> None:
+    job = create_job(
+        connection,
+        job_id="job-1",
+        album_dir=Path("/music/incoming/Artist/Album"),
+        mode=JobMode.AS_IS,
+    )
+
+    assert job.duplicate_action is DuplicateAction.ABORT
+
+
+def test_create_job_stores_explicit_duplicate_action(connection: sqlite3.Connection) -> None:
+    skip_job = create_job(
+        connection,
+        job_id="job-skip",
+        album_dir=Path("/music/incoming/Artist/Album One"),
+        mode=JobMode.AS_IS,
+        duplicate_action=DuplicateAction.SKIP,
+    )
+    remove_job = create_job(
+        connection,
+        job_id="job-remove",
+        album_dir=Path("/music/incoming/Artist/Album Two"),
+        mode=JobMode.AS_IS,
+        duplicate_action=DuplicateAction.REMOVE,
+    )
+
+    assert skip_job.duplicate_action is DuplicateAction.SKIP
+    assert remove_job.duplicate_action is DuplicateAction.REMOVE
+
+
+def test_set_job_skipped_records_terminal_run_details(connection: sqlite3.Connection) -> None:
+    create_job(
+        connection,
+        job_id="job-1",
+        album_dir=Path("/music/incoming/Artist/Album"),
+        mode=JobMode.AS_IS,
+        duplicate_action=DuplicateAction.SKIP,
+        created_at=datetime(2026, 3, 16, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    set_job_running(connection, "job-1")
+
+    skipped = set_job_skipped(
+        connection,
+        "job-1",
+        finished_at=datetime(2026, 3, 16, 12, 5, 0, tzinfo=timezone.utc),
+        run_exit_code=0,
+        run_stdout="This album is already in the library!\nSkipping.",
+        run_stderr="",
+    )
+
+    assert skipped.status is JobStatus.SKIPPED
+    assert skipped.run_exit_code == 0
+    assert skipped.finished_at == datetime(2026, 3, 16, 12, 5, 0, tzinfo=timezone.utc)
+
+
+def test_open_db_migrates_v2_adds_duplicate_action_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "v2.db"
+    raw = sqlite3.connect(str(db_path))
+    try:
+        raw.executescript(
+            """
+            CREATE TABLE jobs (
+              id TEXT PRIMARY KEY,
+              album_dir TEXT NOT NULL,
+              mode TEXT NOT NULL CHECK (mode IN ('as_is', 'release')),
+              release_ref TEXT,
+              status TEXT NOT NULL
+                CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              preview_stdout TEXT,
+              preview_stderr TEXT,
+              preview_exit_code INTEGER,
+              run_stdout TEXT,
+              run_stderr TEXT,
+              run_exit_code INTEGER,
+              CHECK (
+                (mode = 'as_is' AND release_ref IS NULL) OR
+                (mode = 'release' AND release_ref IS NOT NULL)
+              )
+            );
+
+            CREATE INDEX idx_jobs_status_created_at ON jobs(status, created_at);
+
+            CREATE UNIQUE INDEX idx_jobs_album_dir_pending_running
+            ON jobs(album_dir)
+            WHERE status IN ('pending', 'running');
+
+            PRAGMA user_version = 2;
+            """
+        )
+        raw.execute(
+            "INSERT INTO jobs (id, album_dir, mode, release_ref, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "job-1",
+                "/music/incoming/Artist/Album",
+                "as_is",
+                None,
+                "succeeded",
+                "2026-03-16T00:00:00+00:00",
+            ),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    migrated = open_db(db_path)
+    try:
+        assert migrated.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+        job = get_job(migrated, "job-1")
+        assert job is not None
+        assert job.duplicate_action is DuplicateAction.ABORT
+    finally:
+        migrated.close()
 
 
 def test_list_jobs_rejects_non_positive_limit(connection: sqlite3.Connection) -> None:
