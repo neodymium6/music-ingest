@@ -80,6 +80,8 @@ class MusicIngestApp:
             if result is not None:
                 self.refresh_job_snapshot()
             return result
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Failed while processing a queued import job")
             return None
