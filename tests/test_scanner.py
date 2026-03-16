@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from music_ingest.infra.scanner import find_album_dirs, scan_incoming_albums
+import pytest
+
+from music_ingest.infra.scanner import find_album_dirs, scan_incoming_albums, summarize_album_dir
 
 
 def test_find_album_dirs_only_returns_two_level_dirs_with_direct_flac_files(tmp_path: Path) -> None:
@@ -48,3 +50,24 @@ def test_scan_incoming_albums_returns_sorted_album_summaries(tmp_path: Path) -> 
     assert [album.album_name for album in albums] == ["First Album", "Second Album"]
     assert [album.track_count for album in albums] == [2, 1]
     assert albums[0].relative_path == Path("A Artist/First Album")
+
+
+def test_summarize_album_dir_rejects_path_outside_incoming_root(tmp_path: Path) -> None:
+    incoming_root = tmp_path / "incoming"
+    incoming_root.mkdir()
+    outside_album_dir = tmp_path / "other" / "Artist" / "Album"
+    outside_album_dir.mkdir(parents=True)
+    (outside_album_dir / "01.flac").write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="is not under incoming root"):
+        summarize_album_dir(outside_album_dir, incoming_root)
+
+
+def test_summarize_album_dir_rejects_non_two_level_path(tmp_path: Path) -> None:
+    incoming_root = tmp_path / "incoming"
+    shallow_album_dir = incoming_root / "Artist Only"
+    shallow_album_dir.mkdir(parents=True)
+    (shallow_album_dir / "01.flac").write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exactly two levels"):
+        summarize_album_dir(shallow_album_dir, incoming_root)
