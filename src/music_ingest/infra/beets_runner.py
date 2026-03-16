@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 
 @dataclass(slots=True, frozen=True)
 class BeetsCommand:
     argv: tuple[str, ...]
     cwd: Path
-    env: dict[str, str]
+    env: Mapping[str, str]
     timeout_seconds: int
 
 
@@ -31,7 +33,7 @@ class BeetsRunner:
         self._timeout_seconds = timeout_seconds
         self._cwd = working_directory or beetsdir
 
-        env = dict(base_env or {})
+        env = os.environ.copy() if base_env is None else dict(base_env)
         env["BEETSDIR"] = str(beetsdir)
         self._env = env
 
@@ -78,6 +80,6 @@ class BeetsRunner:
         return BeetsCommand(
             argv=(self._executable, "-c", str(self._config_file), *args),
             cwd=self._cwd,
-            env=dict(self._env),
+            env=MappingProxyType(dict(self._env)),
             timeout_seconds=self._timeout_seconds,
         )

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
+
+import pytest
 
 from music_ingest.infra import beets_runner as beets_runner_module
 from music_ingest.infra.beets_runner import BeetsRunner
@@ -32,6 +36,30 @@ def test_build_preview_as_is_command_uses_expected_args_and_environment() -> Non
     assert command.timeout_seconds == 300
     assert command.env["BEETSDIR"] == "/app/beets"
     assert command.env["PATH"] == "/usr/bin"
+
+    mutable_env = cast(dict[str, str], command.env)
+    with pytest.raises(TypeError):
+        mutable_env["PATH"] = "/bin"
+
+
+def test_build_run_as_is_command_uses_expected_args() -> None:
+    runner = BeetsRunner(
+        executable="beet",
+        beetsdir=Path("/app/beets"),
+        config_file=Path("/app/beets/config.yaml"),
+        timeout_seconds=300,
+    )
+
+    command = runner.build_run_as_is(Path("/music/incoming/Artist/Album"))
+
+    assert command.argv == (
+        "beet",
+        "-c",
+        "/app/beets/config.yaml",
+        "import",
+        "-A",
+        "/music/incoming/Artist/Album",
+    )
 
 
 def test_build_release_commands_preserve_release_ref_values() -> None:
@@ -72,6 +100,24 @@ def test_build_release_commands_preserve_release_ref_values() -> None:
     )
 
 
+def test_runner_inherits_process_environment_by_default(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "/usr/local/bin")
+    monkeypatch.setenv("HOME", "/home/tester")
+
+    runner = BeetsRunner(
+        executable="beet",
+        beetsdir=Path("/app/beets"),
+        config_file=Path("/app/beets/config.yaml"),
+        timeout_seconds=120,
+    )
+
+    command = runner.build_preview_as_is(Path("/music/incoming/Artist/Album"))
+
+    assert command.env["PATH"] == "/usr/local/bin"
+    assert command.env["HOME"] == "/home/tester"
+    assert command.env["BEETSDIR"] == "/app/beets"
+
+
 def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> None:
     runner = BeetsRunner(
         executable="beet",
@@ -89,7 +135,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         capture_output: bool,
         check: bool,
         cwd: Path,
-        env: dict[str, str],
+        env: Mapping[str, str],
         text: bool,
         timeout: int,
     ) -> subprocess.CompletedProcess[str]:
@@ -108,6 +154,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
 
     assert result.returncode == 0
     assert result.stdout == "preview ok"
+    command_env = cast(Mapping[str, str], captured["env"])
     assert captured == {
         "argv": (
             "beet",
@@ -121,7 +168,9 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         "capture_output": True,
         "check": False,
         "cwd": Path("/workspace"),
-        "env": {"PATH": "/usr/bin", "BEETSDIR": "/app/beets"},
+        "env": command_env,
         "text": True,
         "timeout": 45,
     }
+    assert command_env["PATH"] == "/usr/bin"
+    assert command_env["BEETSDIR"] == "/app/beets"
