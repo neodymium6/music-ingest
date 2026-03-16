@@ -192,7 +192,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
     ],
 )
 def test_build_run_as_is_input_reflects_duplicate_action(
-    duplicate_action: DuplicateAction, expected_input: str | None
+    duplicate_action: DuplicateAction, expected_input: str
 ) -> None:
     runner = BeetsRunner(
         executable="beet",
