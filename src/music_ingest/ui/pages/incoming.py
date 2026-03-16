@@ -7,6 +7,7 @@ from nicegui import ui
 
 from music_ingest.domain import DuplicateAction, IncomingAlbum
 from music_ingest.services import DuplicateActiveJobError, InvalidReleaseRefError
+from music_ingest.ui.components import render_header
 
 _DUPLICATE_ACTION_OPTIONS = {
     "Abort": DuplicateAction.ABORT,
@@ -23,47 +24,62 @@ logger = logging.getLogger(__name__)
 def register_incoming_page(app: MusicIngestApp) -> None:
     @ui.page("/")
     def incoming_page() -> None:
-        with ui.header().classes("items-center justify-between"):
-            ui.label(app.settings.app.title).classes("text-lg font-medium")
-            ui.link("Jobs", "/jobs")
+        render_header(app.settings.app.title, "/")
 
-        with ui.column().classes("w-full max-w-5xl mx-auto gap-4 p-4"):
-            ui.label("Incoming albums").classes("text-2xl font-semibold")
-            ui.label(f"Scan root: {app.incoming_root}").classes("text-sm text-slate-600")
+        with ui.column().classes("w-full max-w-5xl mx-auto gap-4 p-6"):
+            with ui.row().classes("items-baseline gap-3"):
+                ui.label("Incoming Albums").classes("text-2xl font-semibold")
+                status = ui.badge("").props("outline").classes("text-xs")
 
-            status = ui.label().classes("text-sm text-slate-600")
+            ui.label(f"Scan root: {app.incoming_root}").classes("text-sm text-gray-500")
+
             list_container = ui.column().classes("w-full gap-4")
 
             def refresh_albums() -> None:
                 albums = app.list_incoming_albums()
-                status.set_text(f"{len(albums)} album directories found")
+                status.set_text(f"{len(albums)} found")
 
                 list_container.clear()
                 with list_container:
                     if not albums:
                         with ui.card().classes("w-full"):
-                            ui.label("No importable album directories were found.")
+                            ui.label("No importable album directories found.").classes(
+                                "font-medium"
+                            )
                             ui.label(
                                 "Expected layout: incoming_root/Artist/Album with at least one .flac"
-                            ).classes("text-sm text-slate-600")
+                            ).classes("text-sm text-gray-500")
                         return
 
                     for album in albums:
                         _render_album_card(app, album)
 
-            ui.button("Refresh", on_click=refresh_albums).props("outline")
+            with ui.row().classes("items-center"):
+                ui.button("Refresh", icon="refresh", on_click=refresh_albums).props(
+                    "outline no-caps"
+                )
+
             refresh_albums()
 
 
 def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
-    with ui.card().classes("w-full gap-3"):
-        with ui.column().classes("gap-1"):
-            ui.label(f"{album.artist_name} / {album.album_name}").classes("text-lg font-medium")
-            ui.label(str(album.relative_path)).classes("text-sm text-slate-600")
-            ui.label(f"{album.track_count} FLAC tracks").classes("text-sm text-slate-600")
+    with ui.card().classes("w-full"):
+        with ui.row().classes("items-start justify-between gap-2"):
+            with ui.column().classes("gap-0.5"):
+                ui.label(f"{album.artist_name} / {album.album_name}").classes(
+                    "text-base font-semibold"
+                )
+                ui.label(str(album.relative_path)).classes("text-xs text-gray-500 font-mono")
+                ui.label(f"{album.track_count} FLAC tracks").classes("text-xs text-gray-500")
+            ui.badge(f"{album.track_count} tracks", color="blue-grey").props("outline")
 
-        with ui.row().classes("w-full items-end gap-2"):
-            release_input = ui.input("MusicBrainz release URL or MBID").classes("grow")
+        ui.separator()
+
+        with ui.row().classes("w-full items-end gap-3 flex-wrap"):
+            release_input = ui.input(
+                "MusicBrainz release URL or MBID",
+                placeholder="https://musicbrainz.org/release/...",
+            ).classes("grow min-w-48")
             duplicate_select = ui.select(
                 list(_DUPLICATE_ACTION_OPTIONS.keys()),
                 value="Abort",
@@ -73,19 +89,21 @@ def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
         with ui.row().classes("w-full justify-end gap-2"):
             ui.button(
                 "Import as-is",
+                icon="download_done",
                 on_click=lambda: _enqueue_as_is(
                     app, album, _DUPLICATE_ACTION_OPTIONS[duplicate_select.value]
                 ),
-            ).props("outline")
+            ).props("outline no-caps color=secondary")
             ui.button(
                 "Import with release URL",
+                icon="library_music",
                 on_click=lambda: _enqueue_release(
                     app,
                     album,
                     release_input.value,
                     _DUPLICATE_ACTION_OPTIONS[duplicate_select.value],
                 ),
-            ).props("color=primary")
+            ).props("no-caps color=primary")
 
 
 def _enqueue_as_is(
@@ -94,14 +112,18 @@ def _enqueue_as_is(
     try:
         job = app.enqueue_as_is(album.album_dir, duplicate_action)
     except DuplicateActiveJobError as exc:
-        ui.notify(str(exc), type="warning")
+        ui.notify(str(exc), type="warning", position="top-right")
         return
     except Exception:
         logger.exception("Failed to enqueue as-is import for %s", album.album_dir)
-        ui.notify(f"Failed to queue import for {album.relative_path}", type="negative")
+        ui.notify(
+            f"Failed to queue import for {album.relative_path}",
+            type="negative",
+            position="top-right",
+        )
         return
 
-    ui.notify(f"Queued as-is import: {job.id}", type="positive")
+    ui.notify(f"Queued: {job.id}", type="positive", position="top-right")
 
 
 def _enqueue_release(
@@ -113,14 +135,18 @@ def _enqueue_release(
     try:
         job = app.enqueue_release(album.album_dir, release_ref or "", duplicate_action)
     except InvalidReleaseRefError as exc:
-        ui.notify(str(exc), type="warning")
+        ui.notify(str(exc), type="warning", position="top-right")
         return
     except DuplicateActiveJobError as exc:
-        ui.notify(str(exc), type="warning")
+        ui.notify(str(exc), type="warning", position="top-right")
         return
     except Exception:
         logger.exception("Failed to enqueue release import for %s", album.album_dir)
-        ui.notify(f"Failed to queue release import for {album.relative_path}", type="negative")
+        ui.notify(
+            f"Failed to queue release import for {album.relative_path}",
+            type="negative",
+            position="top-right",
+        )
         return
 
-    ui.notify(f"Queued release import: {job.id}", type="positive")
+    ui.notify(f"Queued: {job.id}", type="positive", position="top-right")
