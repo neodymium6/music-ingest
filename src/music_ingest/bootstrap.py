@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import sqlite3
 from dataclasses import dataclass
 
@@ -34,6 +35,8 @@ def bootstrap() -> BootstrapContext:
         settings.app.port,
     )
 
+    _validate_environment(settings)
+
     connection = open_db(settings.db.path, wal=settings.db.wal)
     beets_runner = BeetsRunner(
         executable=settings.beets.executable,
@@ -50,3 +53,21 @@ def bootstrap() -> BootstrapContext:
         beets_runner=beets_runner,
         import_service=import_service,
     )
+
+
+def _validate_environment(settings: Settings) -> None:
+    log = logging.getLogger(__name__)
+
+    if not settings.paths.incoming_root.is_dir():
+        raise RuntimeError(
+            f"incoming_root does not exist or is not a directory: {settings.paths.incoming_root}"
+        )
+    log.debug("incoming_root OK: %s", settings.paths.incoming_root)
+
+    if not settings.beets.config_file.is_file():
+        raise RuntimeError(f"beets config_file does not exist: {settings.beets.config_file}")
+    log.debug("beets config_file OK: %s", settings.beets.config_file)
+
+    if shutil.which(settings.beets.executable) is None:
+        raise RuntimeError(f"beets executable not found on PATH: {settings.beets.executable!r}")
+    log.debug("beets executable OK: %s", settings.beets.executable)
