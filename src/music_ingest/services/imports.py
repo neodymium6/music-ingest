@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from music_ingest.domain import Job, JobMode
-from music_ingest.infra.db import create_job, get_job, list_jobs
+from music_ingest.infra.db import create_job, get_active_job_for_album_dir, get_job, list_jobs
 
 _MBID_PATTERN = re.compile(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _MBID_SEARCH_PATTERN = re.compile(
@@ -56,7 +56,7 @@ class ImportService:
                 release_ref=release_ref,
             )
         except sqlite3.IntegrityError as exc:
-            if "UNIQUE constraint failed: jobs.album_dir" in str(exc):
+            if get_active_job_for_album_dir(self._connection, album_dir) is not None:
                 raise DuplicateActiveJobError(album_dir) from exc
             raise
 

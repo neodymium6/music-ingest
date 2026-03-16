@@ -23,6 +23,8 @@ class FakeBeetsRunner:
         run_returncode: int = 0,
         run_stdout: str = "",
         run_stderr: str = "",
+        preview_exception: Exception | None = None,
+        run_exception: Exception | None = None,
     ) -> None:
         self.preview_result = subprocess.CompletedProcess(
             ("beet", "import", "--pretend"), preview_returncode, preview_stdout, preview_stderr
@@ -30,24 +32,34 @@ class FakeBeetsRunner:
         self.run_result = subprocess.CompletedProcess(
             ("beet", "import"), run_returncode, run_stdout, run_stderr
         )
+        self.preview_exception = preview_exception
+        self.run_exception = run_exception
         self.calls: list[tuple[str, Path, str | None]] = []
 
     def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
         self.calls.append(("preview_as_is", album_dir, None))
+        if self.preview_exception is not None:
+            raise self.preview_exception
         return self.preview_result
 
     def run_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
         self.calls.append(("run_as_is", album_dir, None))
+        if self.run_exception is not None:
+            raise self.run_exception
         return self.run_result
 
     def preview_release(
         self, album_dir: Path, release_ref: str
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(("preview_release", album_dir, release_ref))
+        if self.preview_exception is not None:
+            raise self.preview_exception
         return self.preview_result
 
     def run_release(self, album_dir: Path, release_ref: str) -> subprocess.CompletedProcess[str]:
         self.calls.append(("run_release", album_dir, release_ref))
+        if self.run_exception is not None:
+            raise self.run_exception
         return self.run_result
 
 
@@ -101,6 +113,33 @@ def test_worker_marks_preview_failures_without_running_import(
     assert runner.calls == [("preview_as_is", Path("/music/incoming/Artist/Album"), None)]
 
 
+def test_worker_fails_job_when_preview_raises(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    worker = ImportWorker(connection, FakeBeetsRunner(preview_exception=TimeoutError("timed out")))
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.FAILED
+    assert result.run_stderr == "beets preview failed: TimeoutError('timed out')"
+
+
+def test_worker_fails_job_when_import_raises(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    worker = ImportWorker(connection, FakeBeetsRunner(run_exception=FileNotFoundError("beet")))
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.FAILED
+    assert result.preview_exit_code == 0
+    assert result.run_stderr == "beets import failed: FileNotFoundError('beet')"
+
+
 def test_start_worker_reconciles_stale_running_jobs(connection: sqlite3.Connection) -> None:
     service = ImportService(connection)
     job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
@@ -143,3 +182,19 @@ def test_worker_runs_release_job_after_successful_preview(connection: sqlite3.Co
             "12345678-1234-1234-1234-123456789abc",
         ),
     ]
+
+
+def test_run_next_pending_claims_oldest_job_first(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    oldest = service.enqueue_as_is(Path("/music/incoming/Artist/Old"))
+    newest = service.enqueue_as_is(Path("/music/incoming/Artist/New"))
+    runner = FakeBeetsRunner()
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+    remaining = service.get_job(newest.id)
+
+    assert result is not None
+    assert result.id == oldest.id
+    assert remaining is not None
+    assert remaining.status is JobStatus.PENDING
