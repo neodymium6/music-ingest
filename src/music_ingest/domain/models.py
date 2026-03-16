@@ -23,3 +23,12 @@ class Job:
     run_stdout: str | None = None
     run_stderr: str | None = None
     run_exit_code: int | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class IncomingAlbum:
+    album_dir: Path
+    relative_path: Path
+    artist_name: str
+    album_name: str
+    track_count: int
