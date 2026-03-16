@@ -98,6 +98,8 @@ def test_build_release_commands_preserve_release_ref_values() -> None:
         "12345678-1234-1234-1234-123456789abc",
         "/music/incoming/Unknown Artist/Unknown Album",
     )
+    assert preview.input_text is None
+    assert run.input_text == "A\n"
 
 
 def test_runner_inherits_process_environment_by_default(monkeypatch) -> None:
@@ -136,6 +138,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         check: bool,
         cwd: Path,
         env: Mapping[str, str],
+        input: str | None,
         text: bool,
         timeout: int,
     ) -> subprocess.CompletedProcess[str]:
@@ -144,6 +147,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         captured["check"] = check
         captured["cwd"] = cwd
         captured["env"] = env
+        captured["input"] = input
         captured["text"] = text
         captured["timeout"] = timeout
         return subprocess.CompletedProcess(argv, 0, stdout="preview ok", stderr="")
@@ -169,9 +173,52 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         "check": False,
         "cwd": Path("/workspace"),
         "env": command_env,
+        "input": None,
         "text": True,
         "timeout": 45,
     }
     assert isinstance(command_env, Mapping)
     assert command_env["PATH"] == "/usr/bin"
     assert command_env["BEETSDIR"] == "/app/beets"
+
+
+def test_run_release_executes_with_apply_input(monkeypatch) -> None:
+    runner = BeetsRunner(
+        executable="beet",
+        beetsdir=Path("/app/beets"),
+        config_file=Path("/app/beets/config.yaml"),
+        timeout_seconds=45,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        argv: tuple[str, ...],
+        *,
+        capture_output: bool,
+        check: bool,
+        cwd: Path,
+        env: Mapping[str, str],
+        input: str | None,
+        text: bool,
+        timeout: int,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["argv"] = argv
+        captured["input"] = input
+        captured["capture_output"] = capture_output
+        captured["check"] = check
+        captured["cwd"] = cwd
+        captured["env"] = env
+        captured["text"] = text
+        captured["timeout"] = timeout
+        return subprocess.CompletedProcess(argv, 0, stdout="applied", stderr="")
+
+    monkeypatch.setattr(beets_runner_module.subprocess, "run", fake_run)
+
+    result = runner.run_release(
+        Path("/music/incoming/Unknown Artist/Unknown Album"),
+        "12345678-1234-1234-1234-123456789abc",
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "applied"
+    assert captured["input"] == "A\n"

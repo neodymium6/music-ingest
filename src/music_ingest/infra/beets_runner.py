@@ -14,6 +14,7 @@ class BeetsCommand:
     cwd: Path
     env: Mapping[str, str]
     timeout_seconds: int
+    input_text: str | None = None
 
 
 class BeetsRunner:
@@ -48,7 +49,13 @@ class BeetsRunner:
         )
 
     def build_run_release(self, album_dir: Path, release_ref: str) -> BeetsCommand:
-        return self._build_command("import", "--search-id", release_ref, str(album_dir))
+        return self._build_command(
+            "import",
+            "--search-id",
+            release_ref,
+            str(album_dir),
+            input_text="A\n",
+        )
 
     def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
         return self.execute(self.build_preview_as_is(album_dir))
@@ -71,14 +78,16 @@ class BeetsRunner:
             check=False,
             cwd=command.cwd,
             env=command.env,
+            input=command.input_text,
             text=True,
             timeout=command.timeout_seconds,
         )
 
-    def _build_command(self, *args: str) -> BeetsCommand:
+    def _build_command(self, *args: str, input_text: str | None = None) -> BeetsCommand:
         return BeetsCommand(
             argv=(self._executable, "-c", str(self._config_file), *args),
             cwd=self._cwd,
             env=self._env,
             timeout_seconds=self._timeout_seconds,
+            input_text=input_text,
         )
