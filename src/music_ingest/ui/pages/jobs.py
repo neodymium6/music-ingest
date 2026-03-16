@@ -54,7 +54,9 @@ def _render_job_card(job: Job, expansion_state: dict[tuple[str, str], bool]) -> 
         with ui.row().classes("w-full items-start justify-between gap-4"):
             with ui.column().classes("gap-1"):
                 ui.label(job.album_dir.as_posix()).classes("text-base font-medium")
-                ui.label(f"mode: {job.mode.value}").classes("text-sm text-slate-600")
+                ui.label(
+                    f"mode: {job.mode.value}  |  if duplicate: {job.duplicate_action.value}"
+                ).classes("text-sm text-slate-600")
                 if job.release_ref is not None:
                     ui.label(f"release_ref: {job.release_ref}").classes("text-sm text-slate-600")
 
