@@ -18,12 +18,14 @@ from music_ingest.ui import MusicIngestApp
 class FakeWorker:
     def __init__(self) -> None:
         self.calls = 0
+        self.closed = 0
 
     def run_next_pending(self) -> None:
         self.calls += 1
         return None
 
     def close(self) -> None:
+        self.closed += 1
         return None
 
 
@@ -69,7 +71,7 @@ def test_music_ingest_app_lists_incoming_albums_and_jobs(
         assert [album.album_name for album in albums] == ["Album"]
         assert jobs[0].id == created_job.id
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())
 
 
 def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.Connection) -> None:
@@ -95,7 +97,7 @@ def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.
         assert second_result is None
         assert worker.calls == 1
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())
 
 
 def test_music_ingest_app_enqueue_release_uses_service_normalization(
@@ -114,4 +116,49 @@ def test_music_ingest_app_enqueue_release_uses_service_normalization(
 
         assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())
+
+
+def test_music_ingest_app_background_task_lifecycle(connection: sqlite3.Connection) -> None:
+    worker = FakeWorker()
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=worker,
+    )
+
+    async def exercise_lifecycle() -> None:
+        await app.start_background_tasks()
+        assert app._polling_task is not None
+        max_wait_seconds = 2.0
+        poll_interval = 0.05
+        waited = 0.0
+        while worker.calls < 1 and waited < max_wait_seconds:
+            await asyncio.sleep(poll_interval)
+            waited += poll_interval
+        assert worker.calls >= 1, "Background polling task did not call worker within timeout"
+        await app.stop_background_tasks()
+        assert app._polling_task is None
+
+    asyncio.run(exercise_lifecycle())
+
+    assert worker.closed == 1
+
+
+def test_music_ingest_app_shutdown_stops_background_task(connection: sqlite3.Connection) -> None:
+    worker = FakeWorker()
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=worker,
+    )
+
+    async def exercise_shutdown() -> None:
+        await app.start_background_tasks()
+        assert app._polling_task is not None
+        await app.shutdown()
+        assert app._polling_task is None
+
+    asyncio.run(exercise_shutdown())
+
+    assert worker.closed == 1

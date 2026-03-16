@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    container_name: music-ingest
+    ports:
+      - "8080:8080"
+    environment:
+      MUSIC_INGEST_CONF_DIR: /app/conf
+      BEETSDIR: /app/beets
+    volumes:
+      - type: bind
+        source: ./conf
+        target: /app/conf
+        read_only: true
+      - type: bind
+        source: ./beets
+        target: /app/beets
+        read_only: true
+      - type: bind
+        source: ./data
+        target: /app/data
+      - type: bind
+        source: ${MUSIC_INCOMING_DIR:?set MUSIC_INCOMING_DIR}
+        target: /music/incoming
+      - type: bind
+        source: ${MUSIC_LIBRARY_DIR:?set MUSIC_LIBRARY_DIR}
+        target: /music/library
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.error, urllib.request; url='http://127.0.0.1:8080/';\ntry:\n    urllib.request.urlopen(url, timeout=2)\nexcept (urllib.error.URLError, TimeoutError, OSError):\n    sys.exit(1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

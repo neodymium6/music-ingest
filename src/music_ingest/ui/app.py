@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Protocol
 
+from nicegui import app as nicegui_app
 from nicegui import ui
 
 from music_ingest.config.schema import Settings
@@ -33,11 +34,15 @@ class MusicIngestApp:
     _worker_lock: Lock = field(init=False, repr=False)
     _worker_executor: ThreadPoolExecutor = field(init=False, repr=False)
     _job_snapshot: list[Job] = field(init=False, repr=False)
+    _polling_task: asyncio.Task[None] | None = field(init=False, repr=False)
+    _is_shutdown: bool = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._worker_lock = Lock()
         self._worker_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-ui")
         self._job_snapshot = self.import_service.list_jobs(limit=200)
+        self._polling_task = None
+        self._is_shutdown = False
 
     @property
     def incoming_root(self) -> Path:
@@ -75,21 +80,62 @@ class MusicIngestApp:
             if result is not None:
                 self.refresh_job_snapshot()
             return result
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Failed while processing a queued import job")
             return None
         finally:
             self._worker_lock.release()
 
-    def shutdown(self) -> None:
-        future = self._worker_executor.submit(self.worker.close)
-        future.result()
-        self._worker_executor.shutdown(wait=True)
+    async def start_background_tasks(self) -> None:
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_worker_loop())
+
+    async def stop_background_tasks(self) -> None:
+        await self._stop_polling_task()
+        await self.shutdown()
+
+    async def shutdown(self) -> None:
+        if self._is_shutdown:
+            return
+        await self._stop_polling_task()
+        try:
+            close_future = self._worker_executor.submit(self.worker.close)
+            await asyncio.wrap_future(close_future)
+        finally:
+            try:
+                await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
+            finally:
+                self._is_shutdown = True
+
+    async def _poll_worker_loop(self) -> None:
+        while True:
+            try:
+                await self.run_pending_jobs()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Unhandled exception in background worker loop")
+            await asyncio.sleep(1.0)
+
+    async def _stop_polling_task(self) -> None:
+        polling_task = self._polling_task
+        self._polling_task = None
+        if polling_task is None:
+            return
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Background polling task failed before shutdown")
 
 
 def register_ui(app: MusicIngestApp) -> None:
-    ui.timer(1.0, app.run_pending_jobs)
-    ui.timer(2.0, app.refresh_job_snapshot)
+    nicegui_app.on_startup(app.start_background_tasks)
+    nicegui_app.on_shutdown(app.stop_background_tasks)
     register_incoming_page(app)
     register_jobs_page(app)
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from music_ingest.bootstrap import bootstrap
 from music_ingest.ui import MusicIngestApp, register_ui, run_ui
 from music_ingest.worker import ThreadedImportWorker
@@ -22,7 +24,7 @@ def main() -> None:
     finally:
         try:
             if app is not None:
-                app.shutdown()
+                asyncio.run(app.stop_background_tasks())
         finally:
             context.connection.close()
 
