@@ -27,6 +27,7 @@ def bootstrap() -> BootstrapContext:
     setup_logging(
         level=settings.logging.level,
         rich_tracebacks=settings.logging.rich_tracebacks,
+        logs_root=settings.paths.logs_root,
     )
     logging.getLogger(__name__).info(
         "Loaded settings for %s on %s:%s",
