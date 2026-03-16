@@ -100,6 +100,19 @@ def list_jobs(connection: sqlite3.Connection, *, limit: int = 100) -> list[Job]:
     return [_row_to_job(row) for row in rows]
 
 
+def get_next_pending_job(connection: sqlite3.Connection) -> Job | None:
+    row = connection.execute(
+        """
+        SELECT * FROM jobs
+        WHERE status = ?
+        ORDER BY created_at ASC, id ASC
+        LIMIT 1
+        """,
+        (JobStatus.PENDING.value,),
+    ).fetchone()
+    return _row_to_job(row) if row is not None else None
+
+
 def set_job_running(
     connection: sqlite3.Connection, job_id: str, *, started_at: datetime | None = None
 ) -> Job:
