@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from music_ingest.domain import JobMode, JobStatus
+from music_ingest.domain import DuplicateAction, JobMode, JobStatus
 from music_ingest.infra.db import create_job, open_db, set_job_running
 from music_ingest.services.imports import (
     DuplicateActiveJobError,
@@ -109,6 +109,32 @@ def test_import_service_reraises_unrelated_integrity_errors(
 
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
         service.enqueue_as_is(album_dir)
+
+
+def test_import_service_enqueue_stores_duplicate_action(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Artist/Album")
+
+    job = service.enqueue_as_is(album_dir, DuplicateAction.SKIP)
+
+    assert job.duplicate_action is DuplicateAction.SKIP
+
+
+def test_import_service_enqueue_release_stores_duplicate_action(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Artist/Album")
+
+    job = service.enqueue_release(
+        album_dir,
+        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789abc",
+        DuplicateAction.REMOVE,
+    )
+
+    assert job.duplicate_action is DuplicateAction.REMOVE
 
 
 def test_import_service_normalizes_release_url_host_case_and_port() -> None:
