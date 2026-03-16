@@ -79,7 +79,7 @@ class MusicIngestApp:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(self._worker_executor, self.worker.run_next_pending)
             if result is not None:
-                await asyncio.to_thread(self.refresh_job_snapshot)
+                self.refresh_job_snapshot()
             return result
         except Exception:
             logger.exception("Failed while processing a queued import job")
@@ -112,7 +112,7 @@ class MusicIngestApp:
     async def _poll_worker_loop(self) -> None:
         while True:
             await self.run_pending_jobs()
-            await asyncio.to_thread(self.refresh_job_snapshot)
+            self.refresh_job_snapshot()
             await asyncio.sleep(1.0)
 
 
