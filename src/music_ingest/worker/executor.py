@@ -57,8 +57,8 @@ class ImportWorker:
             self._connection,
             running_job.id,
             exit_code=preview.returncode,
-            stdout=preview.stdout,
-            stderr=preview.stderr,
+            stdout=_completed_output(preview.stdout),
+            stderr=_completed_output(preview.stderr),
         )
         if preview.returncode != 0:
             return set_job_failed(self._connection, running_job.id)
@@ -76,15 +76,15 @@ class ImportWorker:
                 self._connection,
                 running_job.id,
                 run_exit_code=run.returncode,
-                run_stdout=run.stdout,
-                run_stderr=run.stderr,
+                run_stdout=_completed_output(run.stdout),
+                run_stderr=_completed_output(run.stderr),
             )
         return set_job_failed(
             self._connection,
             running_job.id,
             run_exit_code=run.returncode,
-            run_stdout=run.stdout,
-            run_stderr=run.stderr,
+            run_stdout=_completed_output(run.stdout),
+            run_stderr=_completed_output(run.stderr),
         )
 
     def _run_preview(self, job: Job) -> CompletedProcess[str]:
@@ -108,3 +108,7 @@ def _require_release_ref(job: Job) -> str:
     if job.release_ref is None:
         raise ValueError(f"Release job {job.id} is missing release_ref")
     return job.release_ref
+
+
+def _completed_output(value: str | None) -> str:
+    return value or ""

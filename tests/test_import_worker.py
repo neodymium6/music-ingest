@@ -23,11 +23,11 @@ class FakeBeetsRunner:
         self,
         *,
         preview_returncode: int = 0,
-        preview_stdout: str = "",
-        preview_stderr: str = "",
+        preview_stdout: str | None = "",
+        preview_stderr: str | None = "",
         run_returncode: int = 0,
-        run_stdout: str = "",
-        run_stderr: str = "",
+        run_stdout: str | None = "",
+        run_stderr: str | None = "",
         preview_exception: Exception | None = None,
         run_exception: Exception | None = None,
     ) -> None:
@@ -167,6 +167,27 @@ def test_worker_fails_job_when_import_raises(connection: sqlite3.Connection) -> 
     assert result.status is JobStatus.FAILED
     assert result.preview_exit_code == 0
     assert result.run_stderr == "beets import failed: FileNotFoundError('beet')"
+
+
+def test_worker_coerces_missing_subprocess_output_to_empty_strings(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    worker = ImportWorker(
+        connection,
+        FakeBeetsRunner(preview_stdout=None, preview_stderr=None, run_stdout=None, run_stderr=None),
+    )
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.SUCCEEDED
+    assert result.preview_stdout == ""
+    assert result.preview_stderr == ""
+    assert result.run_stdout == ""
+    assert result.run_stderr == ""
 
 
 def test_start_worker_reconciles_stale_running_jobs(connection: sqlite3.Connection) -> None:
