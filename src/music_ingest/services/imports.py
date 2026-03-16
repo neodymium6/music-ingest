@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 from pathlib import Path
@@ -8,6 +9,8 @@ from uuid import uuid4
 
 from music_ingest.domain import DuplicateAction, Job, JobMode
 from music_ingest.infra.db import create_job, get_active_job_for_album_dir, get_job, list_jobs
+
+logger = logging.getLogger(__name__)
 
 _MBID_PATTERN = re.compile(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _MBID_SEARCH_PATTERN = re.compile(
@@ -69,7 +72,7 @@ class ImportService:
         duplicate_action: DuplicateAction = DuplicateAction.ABORT,
     ) -> Job:
         try:
-            return create_job(
+            job = create_job(
                 self._connection,
                 job_id=str(uuid4()),
                 album_dir=album_dir,
@@ -77,6 +80,14 @@ class ImportService:
                 release_ref=release_ref,
                 duplicate_action=duplicate_action,
             )
+            logger.info(
+                "Job enqueued: %s | %s | mode=%s duplicate_action=%s",
+                job.id,
+                album_dir,
+                mode.value,
+                duplicate_action.value,
+            )
+            return job
         except sqlite3.IntegrityError as exc:
             if _is_active_job_constraint_error(exc) and (
                 get_active_job_for_album_dir(self._connection, album_dir) is not None
