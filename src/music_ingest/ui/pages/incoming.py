@@ -64,20 +64,20 @@ def register_incoming_page(app: MusicIngestApp) -> None:
 
 def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
     with ui.card().classes("w-full"):
-        with ui.row().classes("items-start justify-between gap-2"):
-            with ui.column().classes("gap-0.5"):
-                ui.label(f"{album.artist_name} / {album.album_name}").classes(
-                    "text-base font-semibold"
-                )
-                ui.label(str(album.relative_path)).classes("text-xs text-gray-500 font-mono")
-                ui.label(f"{album.track_count} FLAC tracks").classes("text-xs text-gray-500")
-            ui.badge(f"{album.track_count} tracks", color="blue-grey").props("outline")
+        with ui.column().classes("gap-0.5"):
+            ui.label(f"{album.artist_name} / {album.album_name}").classes("text-base font-semibold")
+            ui.label(str(album.relative_path)).classes("text-xs text-gray-500 font-mono")
+            ui.label(f"{album.track_count} FLAC tracks").classes("text-xs text-gray-500")
 
-        with ui.row().classes("w-full items-end gap-3 flex-wrap"):
-            release_input = ui.input(
-                "MusicBrainz release URL or MBID",
-                placeholder="https://musicbrainz.org/release/...",
-            ).classes("grow min-w-48")
+        with ui.row().classes("w-full items-center gap-3"):
+            release_input = (
+                ui.input(
+                    "MusicBrainz release URL or MBID",
+                    placeholder="https://musicbrainz.org/release/...",
+                )
+                .props("outlined")
+                .classes("grow")
+            )
             duplicate_select = ui.select(
                 list(_DUPLICATE_ACTION_OPTIONS.keys()),
                 value="Abort",
