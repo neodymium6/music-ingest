@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 from typing import Protocol
 
+from nicegui import app as nicegui_app
 from nicegui import ui
 
 from music_ingest.config.schema import Settings
@@ -33,11 +35,15 @@ class MusicIngestApp:
     _worker_lock: Lock = field(init=False, repr=False)
     _worker_executor: ThreadPoolExecutor = field(init=False, repr=False)
     _job_snapshot: list[Job] = field(init=False, repr=False)
+    _polling_task: asyncio.Task[None] | None = field(init=False, repr=False)
+    _is_shutdown: bool = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._worker_lock = Lock()
         self._worker_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-ui")
         self._job_snapshot = self.import_service.list_jobs(limit=200)
+        self._polling_task = None
+        self._is_shutdown = False
 
     @property
     def incoming_root(self) -> Path:
@@ -81,15 +87,37 @@ class MusicIngestApp:
         finally:
             self._worker_lock.release()
 
+    async def start_background_tasks(self) -> None:
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_worker_loop())
+
+    async def stop_background_tasks(self) -> None:
+        if self._polling_task is None:
+            return
+        self._polling_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await self._polling_task
+        self._polling_task = None
+        self.shutdown()
+
     def shutdown(self) -> None:
+        if self._is_shutdown:
+            return
+        self._is_shutdown = True
         future = self._worker_executor.submit(self.worker.close)
         future.result()
         self._worker_executor.shutdown(wait=True)
 
+    async def _poll_worker_loop(self) -> None:
+        while True:
+            await self.run_pending_jobs()
+            self.refresh_job_snapshot()
+            await asyncio.sleep(1.0)
+
 
 def register_ui(app: MusicIngestApp) -> None:
-    ui.timer(1.0, app.run_pending_jobs)
-    ui.timer(2.0, app.refresh_job_snapshot)
+    nicegui_app.on_startup(app.start_background_tasks)
+    nicegui_app.on_shutdown(app.stop_background_tasks)
     register_incoming_page(app)
     register_jobs_page(app)
 
