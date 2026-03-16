@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import pytest
@@ -24,7 +23,7 @@ def _cleanup_logging() -> Generator[None, None, None]:
 def test_setup_logging_without_logs_root_attaches_no_file_handler() -> None:
     setup_logging(logs_root=None)
     for handler in logging.getLogger().handlers:
-        assert not isinstance(handler, logging.FileHandler | RotatingFileHandler)
+        assert not isinstance(handler, logging.FileHandler)
 
 
 def test_setup_logging_creates_log_file(tmp_path: Path) -> None:

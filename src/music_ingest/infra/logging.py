@@ -38,10 +38,17 @@ def setup_logging(
 
 
 def _make_formatter(timezone: str) -> logging.Formatter:
-    try:
-        tz = ZoneInfo(timezone)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError(f"Unknown timezone: {timezone!r}") from exc
+    if timezone.upper() == "UTC":
+        tz: datetime.tzinfo = datetime.timezone.utc
+    else:
+        try:
+            tz = ZoneInfo(timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(
+                f"Unknown timezone: {timezone!r}. "
+                "Ensure the IANA timezone database is available "
+                "(install system tzdata or the 'tzdata' Python package)."
+            ) from exc
 
     class _TZFormatter(logging.Formatter):
         def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
