@@ -35,6 +35,7 @@ class BeetsConfig:
 class LoggingConfig:
     level: str = "INFO"
     rich_tracebacks: bool = True
+    timezone: str = "UTC"
 
 
 @dataclass(slots=True)

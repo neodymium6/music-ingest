@@ -1,2 +1,3 @@
 level: INFO
 rich_tracebacks: true
+timezone: UTC
