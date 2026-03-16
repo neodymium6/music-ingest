@@ -3,12 +3,13 @@ from __future__ import annotations
 import sqlite3
 import subprocess
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from music_ingest.domain import JobMode, JobStatus
-from music_ingest.infra.db import open_db, set_job_running
+from music_ingest.infra.db import create_job, open_db, set_job_running
 from music_ingest.services.imports import (
     DuplicateActiveJobError,
     ImportService,
@@ -229,14 +230,26 @@ def test_worker_run_job_claims_pending_job_by_id(connection: sqlite3.Connection)
 
 
 def test_run_next_pending_claims_oldest_job_first(connection: sqlite3.Connection) -> None:
-    service = ImportService(connection)
-    oldest = service.enqueue_as_is(Path("/music/incoming/Artist/Old"))
-    newest = service.enqueue_as_is(Path("/music/incoming/Artist/New"))
+    created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    oldest = create_job(
+        connection,
+        job_id="job-oldest",
+        album_dir=Path("/music/incoming/Artist/Old"),
+        mode=JobMode.AS_IS,
+        created_at=created_at,
+    )
+    newest = create_job(
+        connection,
+        job_id="job-newest",
+        album_dir=Path("/music/incoming/Artist/New"),
+        mode=JobMode.AS_IS,
+        created_at=created_at + timedelta(seconds=1),
+    )
     runner = FakeBeetsRunner()
     worker = ImportWorker(connection, runner)
 
     result = worker.run_next_pending()
-    remaining = service.get_job(newest.id)
+    remaining = ImportService(connection).get_job(newest.id)
 
     assert result is not None
     assert result.id == oldest.id
