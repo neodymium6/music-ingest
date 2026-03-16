@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -95,8 +94,12 @@ class MusicIngestApp:
         if self._polling_task is None:
             return
         self._polling_task.cancel()
-        with suppress(asyncio.CancelledError):
+        try:
             await self._polling_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Background polling task failed before shutdown")
         self._polling_task = None
         await self.shutdown()
 
@@ -104,15 +107,19 @@ class MusicIngestApp:
         if self._is_shutdown:
             return
         self._is_shutdown = True
-        loop = asyncio.get_running_loop()
         close_future = self._worker_executor.submit(self.worker.close)
-        await asyncio.wrap_future(close_future, loop=loop)
+        await asyncio.wrap_future(close_future)
         await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
 
     async def _poll_worker_loop(self) -> None:
         while True:
-            await self.run_pending_jobs()
-            self.refresh_job_snapshot()
+            try:
+                await self.run_pending_jobs()
+                self.refresh_job_snapshot()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Unhandled exception in background worker loop")
             await asyncio.sleep(1.0)
 
 

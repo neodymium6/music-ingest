@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+ARG UV_VERSION=0.10.10
+
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
@@ -13,7 +15,7 @@ COPY conf /app/conf
 COPY beets /app/beets
 COPY src /app/src
 
-RUN pip install --no-cache-dir uv \
+RUN pip install --no-cache-dir "uv==${UV_VERSION}" \
     && uv sync --frozen --no-dev --no-editable
 
 ENV PATH="/app/.venv/bin:${PATH}"

@@ -18,12 +18,14 @@ from music_ingest.ui import MusicIngestApp
 class FakeWorker:
     def __init__(self) -> None:
         self.calls = 0
+        self.closed = 0
 
     def run_next_pending(self) -> None:
         self.calls += 1
         return None
 
     def close(self) -> None:
+        self.closed += 1
         return None
 
 
@@ -115,3 +117,24 @@ def test_music_ingest_app_enqueue_release_uses_service_normalization(
         assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
     finally:
         asyncio.run(app.shutdown())
+
+
+def test_music_ingest_app_background_task_lifecycle(connection: sqlite3.Connection) -> None:
+    worker = FakeWorker()
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=worker,
+    )
+
+    async def exercise_lifecycle() -> None:
+        await app.start_background_tasks()
+        assert app._polling_task is not None
+        await asyncio.sleep(0.05)
+        assert worker.calls >= 1
+        await app.stop_background_tasks()
+        assert app._polling_task is None
+
+    asyncio.run(exercise_lifecycle())
+
+    assert worker.closed == 1
