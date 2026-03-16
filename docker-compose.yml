@@ -26,7 +26,13 @@ services:
         source: ${MUSIC_LIBRARY_DIR:?set MUSIC_LIBRARY_DIR}
         target: /music/library
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.error, urllib.request; url='http://127.0.0.1:8080/';\ntry:\n    urllib.request.urlopen(url, timeout=2)\nexcept (urllib.error.URLError, TimeoutError, OSError):\n    sys.exit(1)",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

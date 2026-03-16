@@ -91,21 +91,13 @@ class MusicIngestApp:
             self._polling_task = asyncio.create_task(self._poll_worker_loop())
 
     async def stop_background_tasks(self) -> None:
-        polling_task = self._polling_task
-        self._polling_task = None
-        if polling_task is not None:
-            polling_task.cancel()
-            try:
-                await polling_task
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                logger.exception("Background polling task failed before shutdown")
+        await self._stop_polling_task()
         await self.shutdown()
 
     async def shutdown(self) -> None:
         if self._is_shutdown:
             return
+        await self._stop_polling_task()
         try:
             close_future = self._worker_executor.submit(self.worker.close)
             await asyncio.wrap_future(close_future)
@@ -124,6 +116,19 @@ class MusicIngestApp:
             except Exception:
                 logger.exception("Unhandled exception in background worker loop")
             await asyncio.sleep(1.0)
+
+    async def _stop_polling_task(self) -> None:
+        polling_task = self._polling_task
+        self._polling_task = None
+        if polling_task is None:
+            return
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Background polling task failed before shutdown")
 
 
 def register_ui(app: MusicIngestApp) -> None:

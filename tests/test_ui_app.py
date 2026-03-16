@@ -143,3 +143,22 @@ def test_music_ingest_app_background_task_lifecycle(connection: sqlite3.Connecti
     asyncio.run(exercise_lifecycle())
 
     assert worker.closed == 1
+
+
+def test_music_ingest_app_shutdown_stops_background_task(connection: sqlite3.Connection) -> None:
+    worker = FakeWorker()
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=worker,
+    )
+
+    async def exercise_shutdown() -> None:
+        await app.start_background_tasks()
+        assert app._polling_task is not None
+        await app.shutdown()
+        assert app._polling_task is None
+
+    asyncio.run(exercise_shutdown())
+
+    assert worker.closed == 1

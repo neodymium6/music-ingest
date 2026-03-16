@@ -24,7 +24,7 @@ def main() -> None:
     finally:
         try:
             if app is not None:
-                asyncio.run(app.shutdown())
+                asyncio.run(app.stop_background_tasks())
         finally:
             context.connection.close()
 
