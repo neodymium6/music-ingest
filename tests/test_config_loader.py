@@ -87,3 +87,17 @@ def test_load_settings_raises_for_missing_env_conf_dir(
 
     with pytest.raises(FileNotFoundError, match="MUSIC_INGEST_CONF_DIR"):
         load_settings()
+
+
+def test_load_settings_raises_when_no_default_conf_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_loader_path = tmp_path / "installed" / "music_ingest" / "config" / "loader.py"
+    fake_loader_path.parent.mkdir(parents=True)
+    fake_loader_path.write_text("", encoding="utf-8")
+
+    monkeypatch.delenv("MUSIC_INGEST_CONF_DIR", raising=False)
+    monkeypatch.setattr("music_ingest.config.loader.__file__", str(fake_loader_path))
+
+    with pytest.raises(FileNotFoundError, match="No default config directory is available"):
+        load_settings()

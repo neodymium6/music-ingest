@@ -36,4 +36,12 @@ def _default_conf_dir() -> Path:
             )
         return env_path
 
-    return Path(__file__).resolve().parents[3] / "conf"
+    repo_conf_dir = Path(__file__).resolve().parents[3] / "conf"
+    if repo_conf_dir.is_dir():
+        return repo_conf_dir
+
+    raise FileNotFoundError(
+        "No default config directory is available. "
+        "Pass 'conf_dir' to load_settings() or set "
+        f"{_CONF_DIR_ENV_VAR} to a valid config directory."
+    )
