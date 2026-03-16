@@ -106,10 +106,14 @@ class MusicIngestApp:
     async def shutdown(self) -> None:
         if self._is_shutdown:
             return
-        self._is_shutdown = True
-        close_future = self._worker_executor.submit(self.worker.close)
-        await asyncio.wrap_future(close_future)
-        await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
+        try:
+            close_future = self._worker_executor.submit(self.worker.close)
+            await asyncio.wrap_future(close_future)
+        finally:
+            try:
+                await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
+            finally:
+                self._is_shutdown = True
 
     async def _poll_worker_loop(self) -> None:
         while True:

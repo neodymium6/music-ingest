@@ -45,8 +45,8 @@ def register_jobs_page(app: MusicIngestApp) -> None:
                 refresh_jobs()
 
             ui.button("Refresh", on_click=refresh_from_source).props("outline")
-            ui.timer(2.0, refresh_jobs)
-            refresh_jobs()
+            ui.timer(2.0, refresh_from_source)
+            refresh_from_source()
 
 
 def _render_job_card(job: Job, expansion_state: dict[tuple[str, str], bool]) -> None:

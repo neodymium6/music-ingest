@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+# Accept the selected beets release match non-interactively during import.
+BEETS_IMPORT_ACCEPT_ALL_INPUT = "A\n"
+
 
 @dataclass(slots=True, frozen=True)
 class BeetsCommand:
@@ -54,7 +57,7 @@ class BeetsRunner:
             "--search-id",
             release_ref,
             str(album_dir),
-            input_text="A\n",
+            input_text=BEETS_IMPORT_ACCEPT_ALL_INPUT,
         )
 
     def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
