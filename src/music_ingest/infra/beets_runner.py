@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,31 @@ class BeetsRunner:
 
     def build_run_release(self, album_dir: Path, release_ref: str) -> BeetsCommand:
         return self._build_command("import", "--search-id", release_ref, str(album_dir))
+
+    def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_preview_as_is(album_dir))
+
+    def run_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_run_as_is(album_dir))
+
+    def preview_release(
+        self, album_dir: Path, release_ref: str
+    ) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_preview_release(album_dir, release_ref))
+
+    def run_release(self, album_dir: Path, release_ref: str) -> subprocess.CompletedProcess[str]:
+        return self.execute(self.build_run_release(album_dir, release_ref))
+
+    def execute(self, command: BeetsCommand) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            command.argv,
+            capture_output=True,
+            check=False,
+            cwd=command.cwd,
+            env=command.env,
+            text=True,
+            timeout=command.timeout_seconds,
+        )
 
     def _build_command(self, *args: str) -> BeetsCommand:
         return BeetsCommand(
