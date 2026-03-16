@@ -1,4 +1,4 @@
-# music_ingest
+# music-ingest
 
 Web UI for importing ripped albums into a Beets-managed music library.
 
