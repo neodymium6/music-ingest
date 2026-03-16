@@ -14,7 +14,9 @@ COPY beets /app/beets
 COPY src /app/src
 
 RUN pip install --no-cache-dir uv \
-    && uv sync --frozen --system --no-dev --no-editable
+    && uv sync --frozen --no-dev --no-editable
+
+ENV PATH="/app/.venv/bin:${PATH}"
 
 ENV MUSIC_INGEST_CONF_DIR=/app/conf
 
