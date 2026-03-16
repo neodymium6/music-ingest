@@ -136,6 +136,7 @@ def _status_color(status: JobStatus) -> str:
         JobStatus.RUNNING: "primary",
         JobStatus.SUCCEEDED: "positive",
         JobStatus.FAILED: "negative",
+        JobStatus.SKIPPED: "grey",
     }[status]
 
 

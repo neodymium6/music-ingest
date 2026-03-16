@@ -5,8 +5,14 @@ from typing import TYPE_CHECKING
 
 from nicegui import ui
 
-from music_ingest.domain import IncomingAlbum
+from music_ingest.domain import DuplicateAction, IncomingAlbum
 from music_ingest.services import DuplicateActiveJobError, InvalidReleaseRefError
+
+_DUPLICATE_ACTION_OPTIONS = {
+    "Abort": DuplicateAction.ABORT,
+    "Skip new": DuplicateAction.SKIP,
+    "Remove old": DuplicateAction.REMOVE,
+}
 
 if TYPE_CHECKING:
     from music_ingest.ui.app import MusicIngestApp
@@ -51,28 +57,45 @@ def register_incoming_page(app: MusicIngestApp) -> None:
 
 def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
     with ui.card().classes("w-full gap-3"):
-        with ui.row().classes("w-full items-start justify-between gap-4"):
-            with ui.column().classes("gap-1"):
-                ui.label(f"{album.artist_name} / {album.album_name}").classes("text-lg font-medium")
-                ui.label(str(album.relative_path)).classes("text-sm text-slate-600")
-                ui.label(f"{album.track_count} FLAC tracks").classes("text-sm text-slate-600")
+        with (
+            ui.row().classes("w-full items-start justify-between gap-4"),
+            ui.column().classes("gap-1"),
+        ):
+            ui.label(f"{album.artist_name} / {album.album_name}").classes("text-lg font-medium")
+            ui.label(str(album.relative_path)).classes("text-sm text-slate-600")
+            ui.label(f"{album.track_count} FLAC tracks").classes("text-sm text-slate-600")
 
+        with ui.row().classes("w-full items-center gap-2"):
+            duplicate_select = ui.select(
+                list(_DUPLICATE_ACTION_OPTIONS.keys()),
+                value="Abort",
+                label="If duplicate",
+            ).classes("w-36")
             ui.button(
                 "Import as-is",
-                on_click=lambda: _enqueue_as_is(app, album),
+                on_click=lambda: _enqueue_as_is(
+                    app, album, _DUPLICATE_ACTION_OPTIONS[duplicate_select.value]
+                ),
             ).props("color=primary")
 
         with ui.row().classes("w-full items-end gap-2"):
             release_input = ui.input("MusicBrainz release URL or MBID").classes("grow")
             ui.button(
                 "Import with release URL",
-                on_click=lambda: _enqueue_release(app, album, release_input.value),
+                on_click=lambda: _enqueue_release(
+                    app,
+                    album,
+                    release_input.value,
+                    _DUPLICATE_ACTION_OPTIONS[duplicate_select.value],
+                ),
             ).props("outline")
 
 
-def _enqueue_as_is(app: MusicIngestApp, album: IncomingAlbum) -> None:
+def _enqueue_as_is(
+    app: MusicIngestApp, album: IncomingAlbum, duplicate_action: DuplicateAction
+) -> None:
     try:
-        job = app.enqueue_as_is(album.album_dir)
+        job = app.enqueue_as_is(album.album_dir, duplicate_action)
     except DuplicateActiveJobError as exc:
         ui.notify(str(exc), type="warning")
         return
@@ -84,9 +107,14 @@ def _enqueue_as_is(app: MusicIngestApp, album: IncomingAlbum) -> None:
     ui.notify(f"Queued as-is import: {job.id}", type="positive")
 
 
-def _enqueue_release(app: MusicIngestApp, album: IncomingAlbum, release_ref: str | None) -> None:
+def _enqueue_release(
+    app: MusicIngestApp,
+    album: IncomingAlbum,
+    release_ref: str | None,
+    duplicate_action: DuplicateAction,
+) -> None:
     try:
-        job = app.enqueue_release(album.album_dir, release_ref or "")
+        job = app.enqueue_release(album.album_dir, release_ref or "", duplicate_action)
     except InvalidReleaseRefError as exc:
         ui.notify(str(exc), type="warning")
         return
