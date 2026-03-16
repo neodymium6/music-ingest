@@ -330,8 +330,7 @@ def test_open_db_rejects_v1_migration_with_duplicate_active_album_dirs(tmp_path:
         raw.close()
 
     with pytest.raises(RuntimeError, match="multiple pending/running jobs"):
-        migrated = open_db(db_path)
-        migrated.close()
+        open_db(db_path)
 
 
 def test_open_db_rejects_existing_unversioned_jobs_table(tmp_path: Path) -> None:
@@ -345,8 +344,7 @@ def test_open_db_rejects_existing_unversioned_jobs_table(tmp_path: Path) -> None
         raw.close()
 
     with pytest.raises(RuntimeError, match="schema version 0"):
-        migrated = open_db(db_path)
-        migrated.close()
+        open_db(db_path)
 
 
 def test_list_jobs_rejects_non_positive_limit(connection: sqlite3.Connection) -> None:
