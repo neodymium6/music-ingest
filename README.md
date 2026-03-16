@@ -37,16 +37,18 @@ Runtime paths are environment-specific. The container expects these mount points
 - `/app/beets`
 - `/app/conf`
 
-Before starting Docker Compose, set host paths for:
+Before starting Docker Compose, set the following environment variables:
 
-- `MUSIC_INCOMING_DIR`
-- `MUSIC_LIBRARY_DIR`
+- `MUSIC_INCOMING_DIR`: host path for incoming albums
+- `MUSIC_LIBRARY_DIR`: host path for Beets library destination
+- `MUSIC_INGEST_STORAGE_SECRET`: secret key for browser session storage encryption
 
 Example:
 
 ```bash
 export MUSIC_INCOMING_DIR=/path/to/incoming
 export MUSIC_LIBRARY_DIR=/path/to/library
+export MUSIC_INGEST_STORAGE_SECRET=your-secret-key
 docker compose up --build
 ```
 
@@ -56,9 +58,12 @@ Then open `http://127.0.0.1:8080/`.
 directories are not. Because of that, local direct execution is not treated as a
 supported default runtime path yet; the current configuration is container-first.
 
+Optionally, set `TZ` to an IANA timezone name (e.g. `Europe/Berlin`) to use a
+local timezone for file log timestamps. Defaults to `UTC`.
+
 ## What The App Does
 
-The UI exposes two import actions:
+The UI exposes two import actions on the **Incoming** page (`/`):
 
 - `Import as-is`
 - `Import with release URL`
@@ -70,7 +75,13 @@ the source of truth.
 release MBID. The worker first runs `beet import --pretend --search-id ...` and
 then runs the real import if preview succeeds.
 
-Preview and run output are stored in SQLite and shown on the `/jobs` page.
+Both actions accept a **duplicate handling** option: `Abort` (default), `Skip new`,
+or `Remove old`.
+
+Preview and run output are stored in SQLite and shown on the **Jobs** page (`/jobs`).
+
+The UI defaults to dark mode. The toggle in the header persists the preference
+across sessions per browser.
 
 ## Incoming Layout
 
@@ -88,6 +99,9 @@ incoming/
       01 - Track.flac
       02 - Track.flac
 ```
+
+Each album card on the Incoming page shows the artist, album name, path, and an
+expandable list of FLAC filenames.
 
 ## Beets Responsibility
 
@@ -109,6 +123,7 @@ The Compose setup persists application state in `data/`.
 
 - `data/app.db`: app job database
 - `data/beets.db`: Beets library database
+- `data/logs/app.log`: rotating file log (max 10 MB, 5 backups)
 
 The `/jobs` page is the primary place to inspect failures. It shows:
 
