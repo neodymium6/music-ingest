@@ -19,12 +19,12 @@ def register_jobs_page(app: MusicIngestApp) -> None:
 
         render_header(app.settings.app.title, "/jobs")
 
-        with ui.column().classes("w-full max-w-5xl mx-auto gap-4 p-6"):
+        with ui.column().classes("w-full max-w-5xl mx-auto gap-6 p-6"):
             with ui.row().classes("items-baseline gap-3"):
                 ui.label("Import Jobs").classes("text-2xl font-semibold")
                 status = ui.badge("").props("outline").classes("text-xs")
 
-            list_container = ui.column().classes("w-full gap-3")
+            list_container = ui.column().classes("w-full gap-8")
 
             def refresh_jobs() -> None:
                 jobs = app.current_job_snapshot()

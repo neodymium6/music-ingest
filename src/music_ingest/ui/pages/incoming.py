@@ -26,14 +26,14 @@ def register_incoming_page(app: MusicIngestApp) -> None:
     def incoming_page() -> None:
         render_header(app.settings.app.title, "/")
 
-        with ui.column().classes("w-full max-w-5xl mx-auto gap-4 p-6"):
+        with ui.column().classes("w-full max-w-5xl mx-auto gap-6 p-6"):
             with ui.row().classes("items-baseline gap-3"):
                 ui.label("Incoming Albums").classes("text-2xl font-semibold")
                 status = ui.badge("").props("outline").classes("text-xs")
 
             ui.label(f"Scan root: {app.incoming_root}").classes("text-sm text-gray-500")
 
-            list_container = ui.column().classes("w-full gap-4")
+            list_container = ui.column().classes("w-full gap-8")
 
             def refresh_albums() -> None:
                 albums = app.list_incoming_albums()
