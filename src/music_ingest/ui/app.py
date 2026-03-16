@@ -91,16 +91,16 @@ class MusicIngestApp:
             self._polling_task = asyncio.create_task(self._poll_worker_loop())
 
     async def stop_background_tasks(self) -> None:
-        if self._polling_task is None:
-            return
-        self._polling_task.cancel()
-        try:
-            await self._polling_task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("Background polling task failed before shutdown")
+        polling_task = self._polling_task
         self._polling_task = None
+        if polling_task is not None:
+            polling_task.cancel()
+            try:
+                await polling_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Background polling task failed before shutdown")
         await self.shutdown()
 
     async def shutdown(self) -> None:

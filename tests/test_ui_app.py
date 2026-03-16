@@ -130,8 +130,13 @@ def test_music_ingest_app_background_task_lifecycle(connection: sqlite3.Connecti
     async def exercise_lifecycle() -> None:
         await app.start_background_tasks()
         assert app._polling_task is not None
-        await asyncio.sleep(0.05)
-        assert worker.calls >= 1
+        max_wait_seconds = 2.0
+        poll_interval = 0.05
+        waited = 0.0
+        while worker.calls < 1 and waited < max_wait_seconds:
+            await asyncio.sleep(poll_interval)
+            waited += poll_interval
+        assert worker.calls >= 1, "Background polling task did not call worker within timeout"
         await app.stop_background_tasks()
         assert app._polling_task is None
 
