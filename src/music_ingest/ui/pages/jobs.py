@@ -69,7 +69,9 @@ def _render_job_card(job: Job, expansion_state: dict[tuple[str, str], bool]) -> 
                     if job.release_ref is not None:
                         ui.label(f"ref: {job.release_ref}").classes("font-mono")
 
-            ui.badge(job.status.value, color=status_color).classes("shrink-0 self-start")
+            ui.badge(job.status.value, color=status_color).props("outline").classes(
+                "shrink-0 self-start"
+            )
 
         with ui.row().classes("flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500"):
             ui.label(f"created: {_format_timestamp(job.created_at)}")
@@ -89,8 +91,8 @@ def _render_job_card(job: Job, expansion_state: dict[tuple[str, str], bool]) -> 
 
 
 def _exit_code_chip(phase: str, code: int) -> None:
-    color = "positive" if code == 0 else "negative"
-    ui.badge(f"{phase}: exit {code}", color=color).props("rounded")
+    color = "teal-6" if code == 0 else "deep-orange-7"
+    ui.badge(f"{phase}: exit {code}", color=color).props("rounded outline")
 
 
 def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], bool]) -> None:
@@ -152,11 +154,11 @@ def _render_output_block(label: str, value: str | None) -> None:
 
 def _status_color(status: JobStatus) -> str:
     return {
-        JobStatus.PENDING: "orange",
+        JobStatus.PENDING: "amber-7",
         JobStatus.RUNNING: "primary",
-        JobStatus.SUCCEEDED: "positive",
-        JobStatus.FAILED: "negative",
-        JobStatus.SKIPPED: "grey",
+        JobStatus.SUCCEEDED: "teal-7",
+        JobStatus.FAILED: "deep-orange-8",
+        JobStatus.SKIPPED: "blue-grey-5",
     }[status]
 
 
