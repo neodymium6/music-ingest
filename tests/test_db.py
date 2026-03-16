@@ -74,6 +74,11 @@ def test_jobs_block_duplicate_pending_or_running_album_dirs(connection: sqlite3.
     with pytest.raises(sqlite3.IntegrityError):
         create_job(connection, job_id="job-2", album_dir=album_dir, mode=JobMode.AS_IS)
 
+    set_job_running(connection, "job-1")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        create_job(connection, job_id="job-2-running", album_dir=album_dir, mode=JobMode.AS_IS)
+
     set_job_failed(connection, "job-1", run_stderr="preview failed")
     created = create_job(connection, job_id="job-3", album_dir=album_dir, mode=JobMode.AS_IS)
 
@@ -127,3 +132,77 @@ def test_record_job_preview_allows_idempotent_updates(connection: sqlite3.Connec
     assert first.preview_exit_code == 0
     assert second.preview_exit_code == 0
     assert second.preview_stdout == "ok"
+
+
+def test_open_db_migrates_v1_pending_running_index(tmp_path: Path) -> None:
+    db_path = tmp_path / "migrate.db"
+    raw = sqlite3.connect(str(db_path))
+    try:
+        raw.executescript(
+            """
+            CREATE TABLE jobs (
+              id TEXT PRIMARY KEY,
+              album_dir TEXT NOT NULL,
+              mode TEXT NOT NULL
+                CHECK (mode IN ('as_is', 'release')),
+              release_ref TEXT,
+              status TEXT NOT NULL
+                CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              preview_stdout TEXT,
+              preview_stderr TEXT,
+              preview_exit_code INTEGER,
+              run_stdout TEXT,
+              run_stderr TEXT,
+              run_exit_code INTEGER,
+              CHECK (
+                (mode = 'as_is' AND release_ref IS NULL) OR
+                (mode = 'release' AND release_ref IS NOT NULL)
+              )
+            );
+
+            CREATE INDEX idx_jobs_status_created_at
+            ON jobs(status, created_at);
+
+            CREATE UNIQUE INDEX idx_jobs_album_dir_pending_running
+            ON jobs(album_dir, status)
+            WHERE status IN ('pending', 'running');
+
+            PRAGMA user_version = 1;
+            """
+        )
+        raw.execute(
+            """
+            INSERT INTO jobs (id, album_dir, mode, release_ref, status, created_at, started_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "job-1",
+                "/music/incoming/Artist/Album",
+                "as_is",
+                None,
+                "running",
+                "2026-03-16T00:00:00+00:00",
+                "2026-03-16T00:01:00+00:00",
+            ),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    migrated = open_db(db_path)
+    try:
+        user_version = migrated.execute("PRAGMA user_version;").fetchone()[0]
+        assert user_version == SCHEMA_VERSION
+
+        with pytest.raises(sqlite3.IntegrityError):
+            create_job(
+                migrated,
+                job_id="job-2",
+                album_dir=Path("/music/incoming/Artist/Album"),
+                mode=JobMode.AS_IS,
+            )
+    finally:
+        migrated.close()

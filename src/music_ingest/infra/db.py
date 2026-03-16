@@ -6,7 +6,7 @@ from pathlib import Path
 
 from music_ingest.domain import Job, JobMode, JobStatus
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def open_db(path: str | Path, *, wal: bool = True) -> sqlite3.Connection:
@@ -63,7 +63,21 @@ def apply_schema(connection: sqlite3.Connection) -> None:
                 ON jobs(status, created_at);
 
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_album_dir_pending_running
-                ON jobs(album_dir, status)
+                ON jobs(album_dir)
+                WHERE status IN ('pending', 'running');
+                """
+            )
+            connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION};")
+        return
+
+    if current_version == 1:
+        with connection:
+            connection.executescript(
+                """
+                DROP INDEX IF EXISTS idx_jobs_album_dir_pending_running;
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_album_dir_pending_running
+                ON jobs(album_dir)
                 WHERE status IN ('pending', 'running');
                 """
             )
