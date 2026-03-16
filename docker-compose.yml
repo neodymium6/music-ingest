@@ -8,11 +8,23 @@ services:
       MUSIC_INGEST_CONF_DIR: /app/conf
       BEETSDIR: /app/beets
     volumes:
-      - ./conf:/app/conf:ro
-      - ./beets:/app/beets:ro
-      - ./data:/app/data
-      - ${MUSIC_INCOMING_DIR:?set MUSIC_INCOMING_DIR}:/music/incoming
-      - ${MUSIC_LIBRARY_DIR:?set MUSIC_LIBRARY_DIR}:/music/library
+      - type: bind
+        source: ./conf
+        target: /app/conf
+        read_only: true
+      - type: bind
+        source: ./beets
+        target: /app/beets
+        read_only: true
+      - type: bind
+        source: ./data
+        target: /app/data
+      - type: bind
+        source: ${MUSIC_INCOMING_DIR:?set MUSIC_INCOMING_DIR}
+        target: /music/incoming
+      - type: bind
+        source: ${MUSIC_LIBRARY_DIR:?set MUSIC_LIBRARY_DIR}
+        target: /music/library
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/')"]
       interval: 30s
