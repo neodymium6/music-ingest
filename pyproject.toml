@@ -25,7 +25,8 @@ build-backend = "hatchling.build"
 python_version = "3.10"
 files = ["src", "tests"]
 warn_unused_configs = true
-incremental = false
+incremental = true
+cache_dir = ".mypy_cache"
 
 [tool.ruff]
 line-length = 100
