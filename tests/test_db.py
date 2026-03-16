@@ -18,6 +18,7 @@ from music_ingest.infra.db import (
     record_job_preview,
     set_job_failed,
     set_job_running,
+    set_job_succeeded,
 )
 
 
@@ -133,6 +134,32 @@ def test_record_job_preview_allows_idempotent_updates(connection: sqlite3.Connec
     assert first.preview_exit_code == 0
     assert second.preview_exit_code == 0
     assert second.preview_stdout == "ok"
+
+
+def test_set_job_succeeded_records_terminal_run_details(connection: sqlite3.Connection) -> None:
+    create_job(
+        connection,
+        job_id="job-success",
+        album_dir=Path("/music/incoming/Artist/Album"),
+        mode=JobMode.AS_IS,
+        created_at=datetime(2026, 3, 16, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    set_job_running(connection, "job-success")
+
+    finished = set_job_succeeded(
+        connection,
+        "job-success",
+        finished_at=datetime(2026, 3, 16, 12, 5, 0, tzinfo=timezone.utc),
+        run_exit_code=0,
+        run_stdout="imported",
+        run_stderr="",
+    )
+
+    assert finished.status is JobStatus.SUCCEEDED
+    assert finished.run_exit_code == 0
+    assert finished.run_stdout == "imported"
+    assert finished.run_stderr == ""
+    assert finished.finished_at == datetime(2026, 3, 16, 12, 5, 0, tzinfo=timezone.utc)
 
 
 def test_create_job_rejects_naive_datetimes(connection: sqlite3.Connection) -> None:
@@ -320,3 +347,11 @@ def test_open_db_rejects_existing_unversioned_jobs_table(tmp_path: Path) -> None
     with pytest.raises(RuntimeError, match="schema version 0"):
         migrated = open_db(db_path)
         migrated.close()
+
+
+def test_list_jobs_rejects_non_positive_limit(connection: sqlite3.Connection) -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        list_jobs(connection, limit=0)
+
+    with pytest.raises(ValueError, match="positive integer"):
+        list_jobs(connection, limit=-1)

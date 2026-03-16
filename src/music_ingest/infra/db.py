@@ -23,6 +23,7 @@ def open_db(path: str | Path, *, wal: bool = True) -> sqlite3.Connection:
 
 
 def apply_schema(connection: sqlite3.Connection) -> None:
+    connection.row_factory = sqlite3.Row
     current_version = int(connection.execute("PRAGMA user_version;").fetchone()[0])
     if current_version > SCHEMA_VERSION:
         raise RuntimeError(
@@ -82,6 +83,8 @@ def get_job(connection: sqlite3.Connection, job_id: str) -> Job | None:
 
 
 def list_jobs(connection: sqlite3.Connection, *, limit: int = 100) -> list[Job]:
+    if limit <= 0:
+        raise ValueError(f"limit must be a positive integer, got {limit!r}")
     rows = connection.execute(
         """
         SELECT * FROM jobs
