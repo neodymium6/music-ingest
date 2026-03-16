@@ -100,6 +100,115 @@ def list_jobs(connection: sqlite3.Connection, *, limit: int = 100) -> list[Job]:
     return [_row_to_job(row) for row in rows]
 
 
+def get_active_job_for_album_dir(connection: sqlite3.Connection, album_dir: Path) -> Job | None:
+    row = connection.execute(
+        """
+        SELECT * FROM jobs
+        WHERE album_dir = ? AND status IN (?, ?)
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (str(album_dir), JobStatus.PENDING.value, JobStatus.RUNNING.value),
+    ).fetchone()
+    return _row_to_job(row) if row is not None else None
+
+
+def claim_next_pending_job(
+    connection: sqlite3.Connection, *, started_at: datetime | None = None
+) -> Job | None:
+    started = started_at or datetime.now(timezone.utc)
+    row: sqlite3.Row | None = None
+    cursor = connection.cursor()
+    try:
+        cursor.execute("BEGIN IMMEDIATE")
+        pending_row = cursor.execute(
+            """
+            SELECT id FROM jobs
+            WHERE status = ?
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1
+            """,
+            (JobStatus.PENDING.value,),
+        ).fetchone()
+        if pending_row is None:
+            connection.rollback()
+            return None
+
+        job_id = pending_row["id"]
+        cursor.execute(
+            """
+            UPDATE jobs
+            SET status = ?, started_at = ?
+            WHERE id = ? AND status = ?
+            """,
+            (
+                JobStatus.RUNNING.value,
+                _to_db_timestamp(started),
+                job_id,
+                JobStatus.PENDING.value,
+            ),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            return None
+
+        row = cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+
+    return _row_to_job(row) if row is not None else None
+
+
+def claim_pending_job(
+    connection: sqlite3.Connection, job_id: str, *, started_at: datetime | None = None
+) -> Job:
+    started = started_at or datetime.now(timezone.utc)
+    row: sqlite3.Row | None = None
+    cursor = connection.cursor()
+    try:
+        cursor.execute("BEGIN IMMEDIATE")
+        existing_row = cursor.execute(
+            "SELECT status FROM jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        if existing_row is None:
+            raise LookupError(f"Job does not exist: {job_id}")
+        if existing_row["status"] != JobStatus.PENDING.value:
+            raise ValueError(f"Job {job_id} is not pending: {existing_row['status']}")
+
+        cursor.execute(
+            """
+            UPDATE jobs
+            SET status = ?, started_at = ?
+            WHERE id = ? AND status = ?
+            """,
+            (
+                JobStatus.RUNNING.value,
+                _to_db_timestamp(started),
+                job_id,
+                JobStatus.PENDING.value,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(f"Job {job_id} could not be claimed from pending state")
+
+        row = cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+
+    if row is None:
+        raise LookupError(f"Job does not exist: {job_id}")
+    return _row_to_job(row)
+
+
 def set_job_running(
     connection: sqlite3.Connection, job_id: str, *, started_at: datetime | None = None
 ) -> Job:
