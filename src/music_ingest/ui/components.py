@@ -14,9 +14,9 @@ def render_header(title: str, current_page: str) -> None:
         dark.enable() if new_value else dark.disable()
 
     with ui.header().classes(
-        "items-center justify-between px-6 py-2 gap-4 !bg-gray-700 text-white"
+        "items-center justify-between px-6 py-4 gap-4 !bg-gray-700 text-white"
     ):
-        ui.label(title).classes("text-lg font-semibold tracking-wide")
+        ui.label(title).classes("text-2xl font-semibold tracking-wide")
 
         with ui.row().classes("gap-1 items-center"):
             _nav_button("music_note", "Incoming", "/", current_page == "/")
