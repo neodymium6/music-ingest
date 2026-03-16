@@ -5,14 +5,17 @@ from nicegui import ui
 
 
 def render_header(title: str, current_page: str) -> None:
+    ui.colors(primary="#818cf8", secondary="#94a3b8")
     dark = ui.dark_mode(value=nicegui_app.storage.user.get("dark_mode", True))
 
     def toggle_dark() -> None:
-        new_value = not nicegui_app.storage.user.get("dark_mode", False)
+        new_value = not nicegui_app.storage.user.get("dark_mode", True)
         nicegui_app.storage.user["dark_mode"] = new_value
         dark.enable() if new_value else dark.disable()
 
-    with ui.header().classes("items-center justify-between px-6 py-2 gap-4"):
+    with ui.header().classes(
+        "items-center justify-between px-6 py-2 gap-4 !bg-gray-700 text-white"
+    ):
         ui.label(title).classes("text-lg font-semibold tracking-wide")
 
         with ui.row().classes("gap-1 items-center"):
