@@ -5,22 +5,24 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Protocol
 
-from music_ingest.domain import Job, JobMode, JobStatus
+from music_ingest.domain import Job, JobMode
 from music_ingest.infra.db import (
     claim_next_pending_job,
+    claim_pending_job,
     fail_running_jobs,
-    get_job,
     record_job_preview,
     set_job_failed,
-    set_job_running,
     set_job_succeeded,
 )
 
 
 class BeetsRunnerProtocol(Protocol):
     def preview_as_is(self, album_dir: Path) -> CompletedProcess[str]: ...
+
     def run_as_is(self, album_dir: Path) -> CompletedProcess[str]: ...
+
     def preview_release(self, album_dir: Path, release_ref: str) -> CompletedProcess[str]: ...
+
     def run_release(self, album_dir: Path, release_ref: str) -> CompletedProcess[str]: ...
 
 
@@ -39,13 +41,7 @@ class ImportWorker:
         return self._run_claimed_job(claimed_job)
 
     def run_job(self, job_id: str) -> Job:
-        job = get_job(self._connection, job_id)
-        if job is None:
-            raise LookupError(f"Job does not exist: {job_id}")
-        if job.status is not JobStatus.PENDING:
-            raise ValueError(f"Job {job_id} is not pending: {job.status.value}")
-
-        running_job = set_job_running(self._connection, job_id)
+        running_job = claim_pending_job(self._connection, job_id)
         return self._run_claimed_job(running_job)
 
     def _run_claimed_job(self, running_job: Job) -> Job:

@@ -9,7 +9,11 @@ import pytest
 
 from music_ingest.domain import JobMode, JobStatus
 from music_ingest.infra.db import open_db, set_job_running
-from music_ingest.services.imports import DuplicateActiveJobError, ImportService
+from music_ingest.services.imports import (
+    DuplicateActiveJobError,
+    ImportService,
+    normalize_release_ref,
+)
 from music_ingest.worker.executor import ImportWorker, start_worker
 
 
@@ -88,6 +92,14 @@ def test_import_service_normalizes_release_ref_and_blocks_duplicate_active_jobs(
 
     with pytest.raises(DuplicateActiveJobError):
         service.enqueue_as_is(album_dir)
+
+
+def test_import_service_normalizes_release_url_host_case_and_port() -> None:
+    normalized = normalize_release_ref(
+        "https://MusicBrainz.org:443/release/12345678-1234-1234-1234-123456789ABC"
+    )
+
+    assert normalized == "12345678-1234-1234-1234-123456789abc"
 
 
 def test_worker_marks_preview_failures_without_running_import(
@@ -181,6 +193,22 @@ def test_worker_runs_release_job_after_successful_preview(connection: sqlite3.Co
             Path("/music/incoming/Unknown Artist/Unknown Album"),
             "12345678-1234-1234-1234-123456789abc",
         ),
+    ]
+
+
+def test_worker_run_job_claims_pending_job_by_id(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    runner = FakeBeetsRunner(run_stdout="imported")
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_job(job.id)
+
+    assert result.id == job.id
+    assert result.status is JobStatus.SUCCEEDED
+    assert runner.calls == [
+        ("preview_as_is", Path("/music/incoming/Artist/Album"), None),
+        ("run_as_is", Path("/music/incoming/Artist/Album"), None),
     ]
 
 

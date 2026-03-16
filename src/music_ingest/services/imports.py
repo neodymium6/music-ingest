@@ -74,7 +74,7 @@ def normalize_release_ref(release_ref: str) -> str:
         raise InvalidReleaseRefError(
             "release_ref must be a MusicBrainz release URL or raw release MBID"
         )
-    if parsed.netloc not in _SUPPORTED_MB_HOSTS:
+    if parsed.hostname is None or parsed.hostname not in _SUPPORTED_MB_HOSTS:
         raise InvalidReleaseRefError(
             "release_ref URL must point to musicbrainz.org or beta.musicbrainz.org"
         )
