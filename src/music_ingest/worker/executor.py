@@ -62,7 +62,7 @@ class ImportWorker:
         try:
             preview = self._run_preview(running_job)
         except Exception as exc:
-            logger.error("Job %s preview raised: %r", running_job.id, exc)
+            logger.exception("Job %s preview raised", running_job.id)
             return set_job_failed(
                 self._connection,
                 running_job.id,
@@ -82,7 +82,7 @@ class ImportWorker:
         try:
             run = self._run_import(running_job)
         except Exception as exc:
-            logger.error("Job %s import raised: %r", running_job.id, exc)
+            logger.exception("Job %s import raised", running_job.id)
             return set_job_failed(
                 self._connection,
                 running_job.id,

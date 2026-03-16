@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import pytest
@@ -8,9 +10,21 @@ import pytest
 from music_ingest.infra.logging import setup_logging
 
 
-def test_setup_logging_without_logs_root_does_not_create_files(tmp_path: Path) -> None:
+@pytest.fixture(autouse=True)
+def _cleanup_logging() -> Generator[None, None, None]:
+    try:
+        yield
+    finally:
+        root_logger = logging.getLogger()
+        for handler in list(root_logger.handlers):
+            handler.close()
+            root_logger.removeHandler(handler)
+
+
+def test_setup_logging_without_logs_root_attaches_no_file_handler() -> None:
     setup_logging(logs_root=None)
-    assert not any(tmp_path.iterdir())
+    for handler in logging.getLogger().handlers:
+        assert not isinstance(handler, logging.FileHandler | RotatingFileHandler)
 
 
 def test_setup_logging_creates_log_file(tmp_path: Path) -> None:
