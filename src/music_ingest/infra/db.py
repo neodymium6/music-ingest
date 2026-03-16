@@ -18,7 +18,11 @@ def open_db(path: str | Path, *, wal: bool = True) -> sqlite3.Connection:
     connection.execute("PRAGMA foreign_keys = ON;")
     connection.execute(f"PRAGMA journal_mode = {'WAL' if wal else 'DELETE'};")
 
-    apply_schema(connection)
+    try:
+        apply_schema(connection)
+    except Exception:
+        connection.close()
+        raise
     return connection
 
 
@@ -348,7 +352,7 @@ def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
         FROM jobs
         WHERE status IN ('pending', 'running')
         GROUP BY album_dir
-        HAVING duplicate_count > 1
+        HAVING COUNT(*) > 1
         """
     ).fetchall()
     if duplicate_rows:
