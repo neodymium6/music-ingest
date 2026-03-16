@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from nicegui import ui
 
 from music_ingest.domain import Job, JobStatus
+from music_ingest.ui.components import render_header
 
 if TYPE_CHECKING:
     from music_ingest.ui.app import MusicIngestApp
@@ -16,18 +17,18 @@ def register_jobs_page(app: MusicIngestApp) -> None:
     def jobs_page() -> None:
         expansion_state: dict[tuple[str, str], bool] = {}
 
-        with ui.header().classes("items-center justify-between"):
-            ui.label(app.settings.app.title).classes("text-lg font-medium")
-            ui.link("Incoming", "/")
+        render_header(app.settings.app.title, "/jobs")
 
-        with ui.column().classes("w-full max-w-5xl mx-auto gap-4 p-4"):
-            ui.label("Import jobs").classes("text-2xl font-semibold")
-            status = ui.label().classes("text-sm text-slate-600")
-            list_container = ui.column().classes("w-full gap-4")
+        with ui.column().classes("w-full max-w-5xl mx-auto gap-6 p-6"):
+            with ui.row().classes("items-baseline gap-3"):
+                ui.label("Import Jobs").classes("text-2xl font-semibold")
+                status = ui.badge("").props("outline").classes("text-xs")
+
+            list_container = ui.column().classes("w-full gap-8")
 
             def refresh_jobs() -> None:
                 jobs = app.current_job_snapshot()
-                status.set_text(f"{len(jobs)} jobs loaded")
+                status.set_text(f"{len(jobs)} jobs")
                 _prune_expansion_state(expansion_state, jobs)
 
                 list_container.clear()
@@ -44,37 +45,54 @@ def register_jobs_page(app: MusicIngestApp) -> None:
                 app.refresh_job_snapshot()
                 refresh_jobs()
 
-            ui.button("Refresh", on_click=refresh_from_source).props("outline")
+            with ui.row().classes("items-center"):
+                ui.button("Refresh", icon="refresh", on_click=refresh_from_source).props(
+                    "outline no-caps"
+                )
+
             ui.timer(2.0, refresh_from_source)
             refresh_from_source()
 
 
 def _render_job_card(job: Job, expansion_state: dict[tuple[str, str], bool]) -> None:
-    with ui.card().classes("w-full gap-3"):
+    status_color = _status_color(job.status)
+    with ui.card().classes("w-full"):
         with ui.row().classes("w-full items-start justify-between gap-4"):
-            with ui.column().classes("gap-1"):
-                ui.label(job.album_dir.as_posix()).classes("text-base font-medium")
-                ui.label(
-                    f"mode: {job.mode.value}  |  if duplicate: {job.duplicate_action.value}"
-                ).classes("text-sm text-slate-600")
-                if job.release_ref is not None:
-                    ui.label(f"release_ref: {job.release_ref}").classes("text-sm text-slate-600")
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label(job.album_dir.name).classes("text-base font-semibold")
+                ui.label(job.album_dir.as_posix()).classes(
+                    "text-xs text-gray-500 font-mono break-all"
+                )
+                with ui.row().classes("gap-3 text-xs text-gray-500 flex-wrap"):
+                    ui.label(f"mode: {job.mode.value}")
+                    ui.label(f"duplicate: {job.duplicate_action.value}")
+                    if job.release_ref is not None:
+                        ui.label(f"ref: {job.release_ref}").classes("font-mono")
 
-            ui.badge(job.status.value, color=_status_color(job.status))
+            ui.badge(job.status.value, color=status_color).props("outline").classes(
+                "shrink-0 self-start"
+            )
 
-        with ui.row().classes("flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600"):
+        with ui.row().classes("flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500"):
             ui.label(f"created: {_format_timestamp(job.created_at)}")
             if job.started_at is not None:
                 ui.label(f"started: {_format_timestamp(job.started_at)}")
             if job.finished_at is not None:
                 ui.label(f"finished: {_format_timestamp(job.finished_at)}")
 
-        if job.preview_exit_code is not None:
-            ui.label(f"preview exit: {job.preview_exit_code}").classes("text-sm")
-        if job.run_exit_code is not None:
-            ui.label(f"run exit: {job.run_exit_code}").classes("text-sm")
+        if job.preview_exit_code is not None or job.run_exit_code is not None:
+            with ui.row().classes("gap-4 text-xs"):
+                if job.preview_exit_code is not None:
+                    _exit_code_chip("preview", job.preview_exit_code)
+                if job.run_exit_code is not None:
+                    _exit_code_chip("run", job.run_exit_code)
 
         _render_output_sections(job, expansion_state)
+
+
+def _exit_code_chip(phase: str, code: int) -> None:
+    color = "teal-6" if code == 0 else "deep-orange-7"
+    ui.badge(f"{phase}: exit {code}", color=color).props("rounded outline")
 
 
 def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], bool]) -> None:
@@ -93,6 +111,7 @@ def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], boo
 
         with ui.expansion(
             "Preview output",
+            icon="preview",
             value=expansion_state.get(preview_key, False),
             on_value_change=handle_preview_expansion_change,
         ).classes("w-full"):
@@ -113,6 +132,7 @@ def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], boo
 
         with ui.expansion(
             "Run output",
+            icon="terminal",
             value=expansion_state.get(run_key, False),
             on_value_change=handle_run_expansion_change,
         ).classes("w-full"):
@@ -134,11 +154,11 @@ def _render_output_block(label: str, value: str | None) -> None:
 
 def _status_color(status: JobStatus) -> str:
     return {
-        JobStatus.PENDING: "warning",
+        JobStatus.PENDING: "amber-7",
         JobStatus.RUNNING: "primary",
-        JobStatus.SUCCEEDED: "positive",
-        JobStatus.FAILED: "negative",
-        JobStatus.SKIPPED: "grey",
+        JobStatus.SUCCEEDED: "teal-7",
+        JobStatus.FAILED: "deep-orange-8",
+        JobStatus.SKIPPED: "blue-grey-5",
     }[status]
 
 

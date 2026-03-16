@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -153,4 +154,6 @@ def run_ui(settings: Settings) -> None:
         port=settings.app.port,
         title=settings.app.title,
         reload=False,
+        favicon="💿",
+        storage_secret=os.getenv("MUSIC_INGEST_STORAGE_SECRET", "music-ingest-dev"),
     )
