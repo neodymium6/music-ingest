@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -17,6 +18,8 @@ from music_ingest.infra.db import (
     set_job_skipped,
     set_job_succeeded,
 )
+
+logger = logging.getLogger(__name__)
 
 _BEETS_DUPLICATE_MARKER = "already in the library"
 
@@ -54,9 +57,12 @@ class ImportWorker:
         return self._run_claimed_job(running_job)
 
     def _run_claimed_job(self, running_job: Job) -> Job:
+        logger.info("Job started: %s | %s", running_job.id, running_job.album_dir)
+
         try:
             preview = self._run_preview(running_job)
         except Exception as exc:
+            logger.error("Job %s preview raised: %r", running_job.id, exc)
             return set_job_failed(
                 self._connection,
                 running_job.id,
@@ -70,11 +76,13 @@ class ImportWorker:
             stderr=_completed_output(preview.stderr),
         )
         if preview.returncode != 0:
+            logger.warning("Job %s preview failed (exit %d)", running_job.id, preview.returncode)
             return set_job_failed(self._connection, running_job.id)
 
         try:
             run = self._run_import(running_job)
         except Exception as exc:
+            logger.error("Job %s import raised: %r", running_job.id, exc)
             return set_job_failed(
                 self._connection,
                 running_job.id,
@@ -87,6 +95,7 @@ class ImportWorker:
                 running_job.duplicate_action is DuplicateAction.SKIP
                 and _BEETS_DUPLICATE_MARKER in stdout + stderr
             ):
+                logger.info("Job %s skipped (duplicate)", running_job.id)
                 return set_job_skipped(
                     self._connection,
                     running_job.id,
@@ -94,6 +103,7 @@ class ImportWorker:
                     run_stdout=stdout,
                     run_stderr=stderr,
                 )
+            logger.info("Job %s succeeded", running_job.id)
             return set_job_succeeded(
                 self._connection,
                 running_job.id,
@@ -101,6 +111,7 @@ class ImportWorker:
                 run_stdout=stdout,
                 run_stderr=stderr,
             )
+        logger.warning("Job %s failed (exit %d)", running_job.id, run.returncode)
         return set_job_failed(
             self._connection,
             running_job.id,
