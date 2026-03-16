@@ -4,10 +4,12 @@ import asyncio
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from threading import Event
 
 import pytest
 
 from music_ingest.config.schema import Settings
+from music_ingest.domain import Job
 from music_ingest.infra.db import open_db
 from music_ingest.services import ImportService
 from music_ingest.ui import MusicIngestApp
@@ -19,6 +21,22 @@ class FakeWorker:
 
     def run_next_pending(self) -> None:
         self.calls += 1
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+class BlockingWorker(FakeWorker):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = Event()
+        self.release = Event()
+
+    def run_next_pending(self) -> None:
+        self.calls += 1
+        self.started.set()
+        self.release.wait(timeout=1.0)
         return None
 
 
@@ -53,16 +71,24 @@ def test_music_ingest_app_lists_incoming_albums_and_jobs(
 
 
 def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.Connection) -> None:
-    worker = FakeWorker()
+    worker = BlockingWorker()
     app = MusicIngestApp(
         settings=Settings(),
         import_service=ImportService(connection),
         worker=worker,
     )
 
-    result = asyncio.run(app.run_pending_jobs())
+    async def run_concurrently() -> tuple[Job | None, Job | None]:
+        first = asyncio.create_task(app.run_pending_jobs())
+        await asyncio.to_thread(worker.started.wait, 1.0)
+        second = await app.run_pending_jobs()
+        worker.release.set()
+        return await first, second
 
-    assert result is None
+    first_result, second_result = asyncio.run(run_concurrently())
+
+    assert first_result is None
+    assert second_result is None
     assert worker.calls == 1
 
 

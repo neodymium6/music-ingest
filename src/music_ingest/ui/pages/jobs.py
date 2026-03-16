@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 def register_jobs_page(app: MusicIngestApp) -> None:
     @ui.page("/jobs")
     def jobs_page() -> None:
-        ui.timer(1.0, app.run_pending_jobs)
-
         with ui.header().classes("items-center justify-between"):
             ui.label(app.settings.app.title).classes("text-lg font-medium")
             ui.link("Incoming", "/")
@@ -26,7 +24,7 @@ def register_jobs_page(app: MusicIngestApp) -> None:
             list_container = ui.column().classes("w-full gap-4")
 
             def refresh_jobs() -> None:
-                jobs = app.list_jobs(limit=200)
+                jobs = app.current_job_snapshot()
                 status.set_text(f"{len(jobs)} jobs loaded")
 
                 list_container.clear()
@@ -39,7 +37,11 @@ def register_jobs_page(app: MusicIngestApp) -> None:
                     for job in jobs:
                         _render_job_card(job)
 
-            ui.button("Refresh", on_click=refresh_jobs).props("outline")
+            def refresh_from_source() -> None:
+                app.refresh_job_snapshot()
+                refresh_jobs()
+
+            ui.button("Refresh", on_click=refresh_from_source).props("outline")
             ui.timer(2.0, refresh_jobs)
             refresh_jobs()
 

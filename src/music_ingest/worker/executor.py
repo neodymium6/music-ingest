@@ -7,7 +7,6 @@ from typing import Protocol
 
 from music_ingest.config.schema import Settings
 from music_ingest.domain import Job, JobMode
-from music_ingest.infra.beets_runner import BeetsRunner
 from music_ingest.infra.db import (
     claim_next_pending_job,
     claim_pending_job,
@@ -107,18 +106,29 @@ def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunnerProtoc
     return worker
 
 
+def reconcile_stale_jobs(connection: sqlite3.Connection) -> int:
+    return fail_running_jobs(connection)
+
+
 class ThreadedImportWorker:
-    def __init__(self, settings: Settings, beets_runner: BeetsRunner) -> None:
+    def __init__(self, settings: Settings, beets_runner: BeetsRunnerProtocol) -> None:
         self._settings = settings
         self._beets_runner = beets_runner
+        self._connection: sqlite3.Connection | None = None
+
+    def _get_connection(self) -> sqlite3.Connection:
+        if self._connection is None:
+            self._connection = open_db(self._settings.db.path, wal=self._settings.db.wal)
+        return self._connection
 
     def run_next_pending(self) -> Job | None:
-        connection = open_db(self._settings.db.path, wal=self._settings.db.wal)
-        try:
-            worker = ImportWorker(connection, self._beets_runner)
-            return worker.run_next_pending()
-        finally:
-            connection.close()
+        worker = ImportWorker(self._get_connection(), self._beets_runner)
+        return worker.run_next_pending()
+
+    def close(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
 
 
 def _require_release_ref(job: Job) -> str:

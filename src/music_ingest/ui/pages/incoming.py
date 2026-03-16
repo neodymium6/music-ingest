@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 def register_incoming_page(app: MusicIngestApp) -> None:
     @ui.page("/")
     def incoming_page() -> None:
-        ui.timer(1.0, app.run_pending_jobs)
-
         with ui.header().classes("items-center justify-between"):
             ui.label(app.settings.app.title).classes("text-lg font-medium")
             ui.link("Jobs", "/jobs")

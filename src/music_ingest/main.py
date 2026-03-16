@@ -7,6 +7,7 @@ from music_ingest.worker import ThreadedImportWorker
 
 def main() -> None:
     context = bootstrap()
+    app: MusicIngestApp | None = None
     try:
         app = MusicIngestApp(
             settings=context.settings,
@@ -19,6 +20,8 @@ def main() -> None:
         register_ui(app)
         run_ui(context.settings)
     finally:
+        if app is not None:
+            app.shutdown()
         context.connection.close()
 
 
