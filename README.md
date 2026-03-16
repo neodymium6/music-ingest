@@ -103,6 +103,51 @@ incoming/
 Each album card on the Incoming page shows the artist, album name, path, and an
 expandable list of FLAC filenames.
 
+## Configuration
+
+The `conf/` directory uses [Hydra](https://hydra.cc/) for configuration composition.
+The active config directory is set via the `MUSIC_INGEST_CONF_DIR` environment variable
+(defaults to `./conf`).
+
+### `conf/app/base.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `host` | `0.0.0.0` | Host address the web server binds to |
+| `port` | `8080` | Port the web server listens on |
+| `title` | `music-ingest` | App title shown in the browser tab and header |
+
+### `conf/paths/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `incoming_root` | `/music/incoming` | Root directory scanned for incoming albums |
+| `logs_root` | `/app/data/logs` | Directory where rotating log files are written |
+
+### `conf/db/sqlite.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `path` | `/app/data/app.db` | Path to the SQLite job database |
+| `wal` | `true` | Enable WAL mode for better concurrent access |
+
+### `conf/beets/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `executable` | `beet` | Beets CLI command name or absolute path |
+| `beetsdir` | `/app/beets` | Beets state directory (passed as `BEETSDIR`) |
+| `config_file` | `/app/beets/config.yaml` | Beets configuration file path |
+| `timeout_seconds` | `300` | Timeout for a single beet subprocess call |
+
+### `conf/logging/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `level` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `rich_tracebacks` | `true` | Enable Rich-formatted tracebacks on console |
+| `timezone` | `UTC` | IANA timezone for file log timestamps (e.g. `Europe/Berlin`) |
+
 ## Beets Responsibility
 
 This app does orchestration only. Tag writing, file moves, and final library
