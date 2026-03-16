@@ -6,7 +6,7 @@ from subprocess import CompletedProcess
 from typing import Protocol
 
 from music_ingest.config.schema import Settings
-from music_ingest.domain import Job, JobMode
+from music_ingest.domain import DuplicateAction, Job, JobMode
 from music_ingest.infra.db import (
     claim_next_pending_job,
     claim_pending_job,
@@ -14,18 +14,25 @@ from music_ingest.infra.db import (
     open_db,
     record_job_preview,
     set_job_failed,
+    set_job_skipped,
     set_job_succeeded,
 )
+
+_BEETS_DUPLICATE_MARKER = "already in the library"
 
 
 class BeetsRunnerProtocol(Protocol):
     def preview_as_is(self, album_dir: Path) -> CompletedProcess[str]: ...
 
-    def run_as_is(self, album_dir: Path) -> CompletedProcess[str]: ...
+    def run_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction
+    ) -> CompletedProcess[str]: ...
 
     def preview_release(self, album_dir: Path, release_ref: str) -> CompletedProcess[str]: ...
 
-    def run_release(self, album_dir: Path, release_ref: str) -> CompletedProcess[str]: ...
+    def run_release(
+        self, album_dir: Path, release_ref: str, duplicate_action: DuplicateAction
+    ) -> CompletedProcess[str]: ...
 
 
 class ImportWorker:
@@ -74,12 +81,25 @@ class ImportWorker:
                 run_stderr=f"beets import failed: {exc!r}",
             )
         if run.returncode == 0:
+            stdout = _completed_output(run.stdout)
+            stderr = _completed_output(run.stderr)
+            if (
+                running_job.duplicate_action is DuplicateAction.SKIP
+                and _BEETS_DUPLICATE_MARKER in stdout + stderr
+            ):
+                return set_job_skipped(
+                    self._connection,
+                    running_job.id,
+                    run_exit_code=run.returncode,
+                    run_stdout=stdout,
+                    run_stderr=stderr,
+                )
             return set_job_succeeded(
                 self._connection,
                 running_job.id,
                 run_exit_code=run.returncode,
-                run_stdout=_completed_output(run.stdout),
-                run_stderr=_completed_output(run.stderr),
+                run_stdout=stdout,
+                run_stderr=stderr,
             )
         return set_job_failed(
             self._connection,
@@ -96,8 +116,10 @@ class ImportWorker:
 
     def _run_import(self, job: Job) -> CompletedProcess[str]:
         if job.mode is JobMode.AS_IS:
-            return self._beets_runner.run_as_is(job.album_dir)
-        return self._beets_runner.run_release(job.album_dir, _require_release_ref(job))
+            return self._beets_runner.run_as_is(job.album_dir, job.duplicate_action)
+        return self._beets_runner.run_release(
+            job.album_dir, _require_release_ref(job), job.duplicate_action
+        )
 
 
 def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> ImportWorker:

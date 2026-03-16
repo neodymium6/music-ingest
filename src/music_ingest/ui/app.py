@@ -12,7 +12,7 @@ from nicegui import app as nicegui_app
 from nicegui import ui
 
 from music_ingest.config.schema import Settings
-from music_ingest.domain import IncomingAlbum, Job
+from music_ingest.domain import DuplicateAction, IncomingAlbum, Job
 from music_ingest.infra.scanner import scan_incoming_albums
 from music_ingest.services import ImportService
 from music_ingest.ui.pages import register_incoming_page, register_jobs_page
@@ -61,13 +61,20 @@ class MusicIngestApp:
         self._job_snapshot = self.import_service.list_jobs(limit=limit)
         return list(self._job_snapshot)
 
-    def enqueue_as_is(self, album_dir: Path) -> Job:
-        job = self.import_service.enqueue_as_is(album_dir)
+    def enqueue_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction = DuplicateAction.ABORT
+    ) -> Job:
+        job = self.import_service.enqueue_as_is(album_dir, duplicate_action)
         self.refresh_job_snapshot()
         return job
 
-    def enqueue_release(self, album_dir: Path, release_ref: str) -> Job:
-        job = self.import_service.enqueue_release(album_dir, release_ref)
+    def enqueue_release(
+        self,
+        album_dir: Path,
+        release_ref: str,
+        duplicate_action: DuplicateAction = DuplicateAction.ABORT,
+    ) -> Job:
+        job = self.import_service.enqueue_release(album_dir, release_ref, duplicate_action)
         self.refresh_job_snapshot()
         return job
 

@@ -4,9 +4,9 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from music_ingest.domain import Job, JobMode, JobStatus
+from music_ingest.domain import DuplicateAction, Job, JobMode, JobStatus
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def open_db(path: str | Path, *, wal: bool = True) -> sqlite3.Connection:
@@ -45,6 +45,11 @@ def apply_schema(connection: sqlite3.Connection) -> None:
             current_version = 2
             continue
 
+        if current_version == 2:
+            _migrate_v2_to_v3(connection)
+            current_version = 3
+            continue
+
         raise RuntimeError(f"Unsupported database schema version {current_version}")
 
 
@@ -55,6 +60,7 @@ def create_job(
     album_dir: Path,
     mode: JobMode,
     release_ref: str | None = None,
+    duplicate_action: DuplicateAction = DuplicateAction.ABORT,
     created_at: datetime | None = None,
 ) -> Job:
     created = created_at or datetime.now(timezone.utc)
@@ -62,14 +68,15 @@ def create_job(
         connection.execute(
             """
             INSERT INTO jobs (
-              id, album_dir, mode, release_ref, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
+              id, album_dir, mode, release_ref, duplicate_action, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 str(album_dir),
                 mode.value,
                 release_ref,
+                duplicate_action.value,
                 JobStatus.PENDING.value,
                 _to_db_timestamp(created),
             ),
@@ -269,6 +276,28 @@ def set_job_succeeded(
     return _require_job(connection, job_id)
 
 
+def set_job_skipped(
+    connection: sqlite3.Connection,
+    job_id: str,
+    *,
+    finished_at: datetime | None = None,
+    run_exit_code: int = 0,
+    run_stdout: str | None = None,
+    run_stderr: str | None = None,
+) -> Job:
+    finished = finished_at or datetime.now(timezone.utc)
+    query, params = _build_terminal_update(
+        status=JobStatus.SKIPPED,
+        finished_at=finished,
+        run_exit_code=run_exit_code,
+        run_stdout=run_stdout,
+        run_stderr=run_stderr,
+        job_id=job_id,
+    )
+    _update_job(connection, query, params, job_id)
+    return _require_job(connection, job_id)
+
+
 def set_job_failed(
     connection: sqlite3.Connection,
     job_id: str,
@@ -343,6 +372,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         album_dir=Path(row["album_dir"]),
         mode=JobMode(row["mode"]),
         release_ref=row["release_ref"],
+        duplicate_action=DuplicateAction(row["duplicate_action"]),
         status=JobStatus(row["status"]),
         created_at=_require_timestamp(row["created_at"], field_name="created_at"),
         started_at=_from_db_timestamp(row["started_at"]),
@@ -452,6 +482,56 @@ def _create_schema_v1(connection: sqlite3.Connection) -> None:
             """
         )
         connection.execute("PRAGMA user_version = 1;")
+
+
+def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+    with connection:
+        connection.executescript(
+            """
+            CREATE TABLE jobs_new (
+              id TEXT PRIMARY KEY,
+              album_dir TEXT NOT NULL,
+              mode TEXT NOT NULL
+                CHECK (mode IN ('as_is', 'release')),
+              release_ref TEXT,
+              duplicate_action TEXT NOT NULL DEFAULT 'abort'
+                CHECK (duplicate_action IN ('abort', 'skip', 'remove')),
+              status TEXT NOT NULL
+                CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'skipped')),
+              created_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              preview_stdout TEXT,
+              preview_stderr TEXT,
+              preview_exit_code INTEGER,
+              run_stdout TEXT,
+              run_stderr TEXT,
+              run_exit_code INTEGER,
+              CHECK (
+                (mode = 'as_is' AND release_ref IS NULL) OR
+                (mode = 'release' AND release_ref IS NOT NULL)
+              )
+            );
+
+            INSERT INTO jobs_new
+              SELECT id, album_dir, mode, release_ref, 'abort',
+                     status, created_at, started_at, finished_at,
+                     preview_stdout, preview_stderr, preview_exit_code,
+                     run_stdout, run_stderr, run_exit_code
+              FROM jobs;
+
+            DROP TABLE jobs;
+            ALTER TABLE jobs_new RENAME TO jobs;
+
+            CREATE INDEX idx_jobs_status_created_at
+            ON jobs(status, created_at);
+
+            CREATE UNIQUE INDEX idx_jobs_album_dir_pending_running
+            ON jobs(album_dir)
+            WHERE status IN ('pending', 'running');
+            """
+        )
+        connection.execute("PRAGMA user_version = 3;")
 
 
 def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:

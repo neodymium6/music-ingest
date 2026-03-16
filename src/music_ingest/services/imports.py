@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from music_ingest.domain import Job, JobMode
+from music_ingest.domain import DuplicateAction, Job, JobMode
 from music_ingest.infra.db import create_job, get_active_job_for_album_dir, get_job, list_jobs
 
 _MBID_PATTERN = re.compile(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -34,14 +34,24 @@ class ImportService:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def enqueue_as_is(self, album_dir: Path) -> Job:
-        return self._enqueue(album_dir=album_dir, mode=JobMode.AS_IS)
+    def enqueue_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction = DuplicateAction.ABORT
+    ) -> Job:
+        return self._enqueue(
+            album_dir=album_dir, mode=JobMode.AS_IS, duplicate_action=duplicate_action
+        )
 
-    def enqueue_release(self, album_dir: Path, release_ref: str) -> Job:
+    def enqueue_release(
+        self,
+        album_dir: Path,
+        release_ref: str,
+        duplicate_action: DuplicateAction = DuplicateAction.ABORT,
+    ) -> Job:
         return self._enqueue(
             album_dir=album_dir,
             mode=JobMode.RELEASE,
             release_ref=normalize_release_ref(release_ref),
+            duplicate_action=duplicate_action,
         )
 
     def get_job(self, job_id: str) -> Job | None:
@@ -50,7 +60,14 @@ class ImportService:
     def list_jobs(self, *, limit: int = 100) -> list[Job]:
         return list_jobs(self._connection, limit=limit)
 
-    def _enqueue(self, *, album_dir: Path, mode: JobMode, release_ref: str | None = None) -> Job:
+    def _enqueue(
+        self,
+        *,
+        album_dir: Path,
+        mode: JobMode,
+        release_ref: str | None = None,
+        duplicate_action: DuplicateAction = DuplicateAction.ABORT,
+    ) -> Job:
         try:
             return create_job(
                 self._connection,
@@ -58,6 +75,7 @@ class ImportService:
                 album_dir=album_dir,
                 mode=mode,
                 release_ref=release_ref,
+                duplicate_action=duplicate_action,
             )
         except sqlite3.IntegrityError as exc:
             if _is_active_job_constraint_error(exc) and (

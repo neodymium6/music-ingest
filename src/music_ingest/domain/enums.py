@@ -13,3 +13,10 @@ class JobStatus(str, Enum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class DuplicateAction(str, Enum):
+    ABORT = "abort"
+    SKIP = "skip"
+    REMOVE = "remove"

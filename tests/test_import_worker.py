@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from music_ingest.domain import JobMode, JobStatus
+from music_ingest.domain import DuplicateAction, JobMode, JobStatus
 from music_ingest.infra.db import create_job, open_db, set_job_running
 from music_ingest.services.imports import (
     DuplicateActiveJobError,
@@ -39,16 +39,18 @@ class FakeBeetsRunner:
         )
         self.preview_exception = preview_exception
         self.run_exception = run_exception
-        self.calls: list[tuple[str, Path, str | None]] = []
+        self.calls: list[tuple[str, Path, str | None, DuplicateAction | None]] = []
 
     def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
-        self.calls.append(("preview_as_is", album_dir, None))
+        self.calls.append(("preview_as_is", album_dir, None, None))
         if self.preview_exception is not None:
             raise self.preview_exception
         return self.preview_result
 
-    def run_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
-        self.calls.append(("run_as_is", album_dir, None))
+    def run_as_is(
+        self, album_dir: Path, duplicate_action: DuplicateAction
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("run_as_is", album_dir, None, duplicate_action))
         if self.run_exception is not None:
             raise self.run_exception
         return self.run_result
@@ -56,13 +58,15 @@ class FakeBeetsRunner:
     def preview_release(
         self, album_dir: Path, release_ref: str
     ) -> subprocess.CompletedProcess[str]:
-        self.calls.append(("preview_release", album_dir, release_ref))
+        self.calls.append(("preview_release", album_dir, release_ref, None))
         if self.preview_exception is not None:
             raise self.preview_exception
         return self.preview_result
 
-    def run_release(self, album_dir: Path, release_ref: str) -> subprocess.CompletedProcess[str]:
-        self.calls.append(("run_release", album_dir, release_ref))
+    def run_release(
+        self, album_dir: Path, release_ref: str, duplicate_action: DuplicateAction
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("run_release", album_dir, release_ref, duplicate_action))
         if self.run_exception is not None:
             raise self.run_exception
         return self.run_result
@@ -111,6 +115,32 @@ def test_import_service_reraises_unrelated_integrity_errors(
         service.enqueue_as_is(album_dir)
 
 
+def test_import_service_enqueue_stores_duplicate_action(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Artist/Album")
+
+    job = service.enqueue_as_is(album_dir, DuplicateAction.SKIP)
+
+    assert job.duplicate_action is DuplicateAction.SKIP
+
+
+def test_import_service_enqueue_release_stores_duplicate_action(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Artist/Album")
+
+    job = service.enqueue_release(
+        album_dir,
+        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789abc",
+        DuplicateAction.REMOVE,
+    )
+
+    assert job.duplicate_action is DuplicateAction.REMOVE
+
+
 def test_import_service_normalizes_release_url_host_case_and_port() -> None:
     normalized = normalize_release_ref(
         "https://MusicBrainz.org:443/release/12345678-1234-1234-1234-123456789ABC"
@@ -139,7 +169,7 @@ def test_worker_marks_preview_failures_without_running_import(
     assert result.preview_stderr == "failed"
     assert result.run_stdout is None
     assert result.run_stderr is None
-    assert runner.calls == [("preview_as_is", Path("/music/incoming/Artist/Album"), None)]
+    assert runner.calls == [("preview_as_is", Path("/music/incoming/Artist/Album"), None, None)]
 
 
 def test_worker_fails_job_when_preview_raises(connection: sqlite3.Connection) -> None:
@@ -225,11 +255,13 @@ def test_worker_runs_release_job_after_successful_preview(connection: sqlite3.Co
             "preview_release",
             Path("/music/incoming/Unknown Artist/Unknown Album"),
             "12345678-1234-1234-1234-123456789abc",
+            None,
         ),
         (
             "run_release",
             Path("/music/incoming/Unknown Artist/Unknown Album"),
             "12345678-1234-1234-1234-123456789abc",
+            DuplicateAction.ABORT,
         ),
     ]
 
@@ -245,9 +277,61 @@ def test_worker_run_job_claims_pending_job_by_id(connection: sqlite3.Connection)
     assert result.id == job.id
     assert result.status is JobStatus.SUCCEEDED
     assert runner.calls == [
-        ("preview_as_is", Path("/music/incoming/Artist/Album"), None),
-        ("run_as_is", Path("/music/incoming/Artist/Album"), None),
+        ("preview_as_is", Path("/music/incoming/Artist/Album"), None, None),
+        ("run_as_is", Path("/music/incoming/Artist/Album"), None, DuplicateAction.ABORT),
     ]
+
+
+def test_worker_marks_job_skipped_when_beets_reports_duplicate(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"), DuplicateAction.SKIP)
+    runner = FakeBeetsRunner(
+        run_stdout="This album is already in the library!\nSkipping.",
+        run_stderr="",
+    )
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.SKIPPED
+    assert result.run_exit_code == 0
+
+
+def test_worker_succeeds_when_skip_action_but_no_duplicate(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"), DuplicateAction.SKIP)
+    runner = FakeBeetsRunner(run_stdout="Importing Artist - Album", run_stderr="")
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.SUCCEEDED
+
+
+def test_worker_succeeds_on_remove_action_even_with_duplicate_marker(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"), DuplicateAction.REMOVE)
+    runner = FakeBeetsRunner(
+        run_stdout="This album is already in the library!\nRemoving old.",
+        run_stderr="",
+    )
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.SUCCEEDED
 
 
 def test_run_next_pending_claims_oldest_job_first(connection: sqlite3.Connection) -> None:

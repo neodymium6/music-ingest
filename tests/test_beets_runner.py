@@ -7,6 +7,7 @@ from types import MappingProxyType
 
 import pytest
 
+from music_ingest.domain import DuplicateAction
 from music_ingest.infra import beets_runner as beets_runner_module
 from music_ingest.infra.beets_runner import BeetsRunner
 
@@ -180,6 +181,56 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
     assert isinstance(command_env, Mapping)
     assert command_env["PATH"] == "/usr/bin"
     assert command_env["BEETSDIR"] == "/app/beets"
+
+
+@pytest.mark.parametrize(
+    ("duplicate_action", "expected_input"),
+    [
+        (DuplicateAction.ABORT, ""),
+        (DuplicateAction.SKIP, "S\n"),
+        (DuplicateAction.REMOVE, "R\n"),
+    ],
+)
+def test_build_run_as_is_input_reflects_duplicate_action(
+    duplicate_action: DuplicateAction, expected_input: str
+) -> None:
+    runner = BeetsRunner(
+        executable="beet",
+        beetsdir=Path("/app/beets"),
+        config_file=Path("/app/beets/config.yaml"),
+        timeout_seconds=300,
+    )
+
+    command = runner.build_run_as_is(Path("/music/incoming/Artist/Album"), duplicate_action)
+
+    assert command.input_text == expected_input
+
+
+@pytest.mark.parametrize(
+    ("duplicate_action", "expected_input"),
+    [
+        (DuplicateAction.ABORT, "A\n"),
+        (DuplicateAction.SKIP, "A\nS\n"),
+        (DuplicateAction.REMOVE, "A\nR\n"),
+    ],
+)
+def test_build_run_release_input_reflects_duplicate_action(
+    duplicate_action: DuplicateAction, expected_input: str
+) -> None:
+    runner = BeetsRunner(
+        executable="beet",
+        beetsdir=Path("/app/beets"),
+        config_file=Path("/app/beets/config.yaml"),
+        timeout_seconds=300,
+    )
+
+    command = runner.build_run_release(
+        Path("/music/incoming/Artist/Album"),
+        "12345678-1234-1234-1234-123456789abc",
+        duplicate_action,
+    )
+
+    assert command.input_text == expected_input
 
 
 def test_run_release_executes_with_apply_input(monkeypatch) -> None:

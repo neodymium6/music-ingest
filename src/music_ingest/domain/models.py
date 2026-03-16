@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from music_ingest.domain.enums import JobMode, JobStatus
+from music_ingest.domain.enums import DuplicateAction, JobMode, JobStatus
 
 
 @dataclass(slots=True, frozen=True)
@@ -13,6 +13,7 @@ class Job:
     album_dir: Path
     mode: JobMode
     release_ref: str | None
+    duplicate_action: DuplicateAction
     status: JobStatus
     created_at: datetime
     started_at: datetime | None = None
