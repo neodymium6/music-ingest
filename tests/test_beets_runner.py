@@ -186,7 +186,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
 @pytest.mark.parametrize(
     ("duplicate_action", "expected_input"),
     [
-        (DuplicateAction.ABORT, None),
+        (DuplicateAction.ABORT, ""),
         (DuplicateAction.SKIP, "S\n"),
         (DuplicateAction.REMOVE, "R\n"),
     ],

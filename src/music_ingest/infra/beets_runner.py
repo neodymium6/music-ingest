@@ -52,7 +52,7 @@ class BeetsRunner:
         self, album_dir: Path, duplicate_action: DuplicateAction = DuplicateAction.ABORT
     ) -> BeetsCommand:
         keystroke = _DUPLICATE_KEYSTROKE.get(duplicate_action)
-        input_text = f"{keystroke}\n" if keystroke else None
+        input_text = f"{keystroke}\n" if keystroke else ""
         return self._build_command("import", "-A", str(album_dir), input_text=input_text)
 
     def build_preview_release(self, album_dir: Path, release_ref: str) -> BeetsCommand:
