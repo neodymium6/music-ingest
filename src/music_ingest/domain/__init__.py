@@ -1,4 +1,4 @@
 from music_ingest.domain.enums import JobMode, JobStatus
-from music_ingest.domain.models import Job
+from music_ingest.domain.models import IncomingAlbum, Job
 
-__all__ = ["Job", "JobMode", "JobStatus"]
+__all__ = ["IncomingAlbum", "Job", "JobMode", "JobStatus"]
