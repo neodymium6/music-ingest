@@ -5,7 +5,7 @@ from nicegui import ui
 
 
 def render_header(title: str, current_page: str) -> None:
-    dark = ui.dark_mode(value=nicegui_app.storage.user.get("dark_mode", False))
+    dark = ui.dark_mode(value=nicegui_app.storage.user.get("dark_mode", True))
 
     def toggle_dark() -> None:
         new_value = not nicegui_app.storage.user.get("dark_mode", False)
