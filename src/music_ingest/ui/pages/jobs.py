@@ -28,6 +28,7 @@ def register_jobs_page(app: MusicIngestApp) -> None:
             def refresh_jobs() -> None:
                 jobs = app.current_job_snapshot()
                 status.set_text(f"{len(jobs)} jobs loaded")
+                _prune_expansion_state(expansion_state, jobs)
 
                 list_container.clear()
                 with list_container:
@@ -115,6 +116,13 @@ def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], boo
         ).classes("w-full"):
             _render_output_block("stdout", job.run_stdout)
             _render_output_block("stderr", job.run_stderr)
+
+
+def _prune_expansion_state(expansion_state: dict[tuple[str, str], bool], jobs: list[Job]) -> None:
+    active_keys = {(job.id, section) for job in jobs for section in ("preview", "run")}
+    for key in list(expansion_state):
+        if key not in active_keys:
+            del expansion_state[key]
 
 
 def _render_output_block(label: str, value: str | None) -> None:

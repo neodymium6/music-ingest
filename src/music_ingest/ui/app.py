@@ -115,7 +115,6 @@ class MusicIngestApp:
         while True:
             try:
                 await self.run_pending_jobs()
-                self.refresh_job_snapshot()
             except asyncio.CancelledError:
                 raise
             except Exception:
