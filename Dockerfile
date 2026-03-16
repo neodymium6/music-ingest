@@ -13,7 +13,8 @@ COPY conf /app/conf
 COPY beets /app/beets
 COPY src /app/src
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --system --no-dev --no-editable
 
 ENV MUSIC_INGEST_CONF_DIR=/app/conf
 

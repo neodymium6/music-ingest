@@ -79,7 +79,7 @@ class MusicIngestApp:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(self._worker_executor, self.worker.run_next_pending)
             if result is not None:
-                self.refresh_job_snapshot()
+                await asyncio.to_thread(self.refresh_job_snapshot)
             return result
         except Exception:
             logger.exception("Failed while processing a queued import job")
@@ -98,20 +98,21 @@ class MusicIngestApp:
         with suppress(asyncio.CancelledError):
             await self._polling_task
         self._polling_task = None
-        self.shutdown()
+        await self.shutdown()
 
-    def shutdown(self) -> None:
+    async def shutdown(self) -> None:
         if self._is_shutdown:
             return
         self._is_shutdown = True
-        future = self._worker_executor.submit(self.worker.close)
-        future.result()
-        self._worker_executor.shutdown(wait=True)
+        loop = asyncio.get_running_loop()
+        close_future = self._worker_executor.submit(self.worker.close)
+        await asyncio.wrap_future(close_future, loop=loop)
+        await asyncio.to_thread(self._worker_executor.shutdown, wait=True)
 
     async def _poll_worker_loop(self) -> None:
         while True:
             await self.run_pending_jobs()
-            self.refresh_job_snapshot()
+            await asyncio.to_thread(self.refresh_job_snapshot)
             await asyncio.sleep(1.0)
 
 

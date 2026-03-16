@@ -69,7 +69,7 @@ def test_music_ingest_app_lists_incoming_albums_and_jobs(
         assert [album.album_name for album in albums] == ["Album"]
         assert jobs[0].id == created_job.id
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())
 
 
 def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.Connection) -> None:
@@ -95,7 +95,7 @@ def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.
         assert second_result is None
         assert worker.calls == 1
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())
 
 
 def test_music_ingest_app_enqueue_release_uses_service_normalization(
@@ -114,4 +114,4 @@ def test_music_ingest_app_enqueue_release_uses_service_normalization(
 
         assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
     finally:
-        app.shutdown()
+        asyncio.run(app.shutdown())

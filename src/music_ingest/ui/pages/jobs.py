@@ -80,12 +80,18 @@ def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], boo
         for value in (job.preview_stdout, job.preview_stderr, job.preview_exit_code)
     ):
         preview_key = (job.id, "preview")
+
+        def handle_preview_expansion_change(
+            event,
+            *,
+            key: tuple[str, str] = preview_key,
+        ) -> None:
+            expansion_state[key] = bool(event.value)
+
         with ui.expansion(
             "Preview output",
             value=expansion_state.get(preview_key, False),
-            on_value_change=lambda event, key=preview_key: expansion_state.__setitem__(
-                key, bool(event.value)
-            ),
+            on_value_change=handle_preview_expansion_change,
         ).classes("w-full"):
             _render_output_block("stdout", job.preview_stdout)
             _render_output_block("stderr", job.preview_stderr)
@@ -94,12 +100,18 @@ def _render_output_sections(job: Job, expansion_state: dict[tuple[str, str], boo
         value not in (None, "") for value in (job.run_stdout, job.run_stderr, job.run_exit_code)
     ):
         run_key = (job.id, "run")
+
+        def handle_run_expansion_change(
+            event,
+            *,
+            key: tuple[str, str] = run_key,
+        ) -> None:
+            expansion_state[key] = bool(event.value)
+
         with ui.expansion(
             "Run output",
             value=expansion_state.get(run_key, False),
-            on_value_change=lambda event, key=run_key: expansion_state.__setitem__(
-                key, bool(event.value)
-            ),
+            on_value_change=handle_run_expansion_change,
         ).classes("w-full"):
             _render_output_block("stdout", job.run_stdout)
             _render_output_block("stderr", job.run_stderr)
