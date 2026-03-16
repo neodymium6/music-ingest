@@ -20,9 +20,11 @@ def main() -> None:
         register_ui(app)
         run_ui(context.settings)
     finally:
-        if app is not None:
-            app.shutdown()
-        context.connection.close()
+        try:
+            if app is not None:
+                app.shutdown()
+        finally:
+            context.connection.close()
 
 
 if __name__ == "__main__":

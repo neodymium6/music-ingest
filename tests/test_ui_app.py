@@ -36,7 +36,7 @@ class BlockingWorker(FakeWorker):
     def run_next_pending(self) -> None:
         self.calls += 1
         self.started.set()
-        self.release.wait(timeout=1.0)
+        self.release.wait()
         return None
 
 
@@ -62,12 +62,14 @@ def test_music_ingest_app_lists_incoming_albums_and_jobs(
     service = ImportService(connection)
     created_job = service.enqueue_as_is(album_dir)
     app = MusicIngestApp(settings=settings, import_service=service, worker=FakeWorker())
+    try:
+        albums = app.list_incoming_albums()
+        jobs = app.list_jobs()
 
-    albums = app.list_incoming_albums()
-    jobs = app.list_jobs()
-
-    assert [album.album_name for album in albums] == ["Album"]
-    assert jobs[0].id == created_job.id
+        assert [album.album_name for album in albums] == ["Album"]
+        assert jobs[0].id == created_job.id
+    finally:
+        app.shutdown()
 
 
 def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.Connection) -> None:
@@ -80,16 +82,20 @@ def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.
 
     async def run_concurrently() -> tuple[Job | None, Job | None]:
         first = asyncio.create_task(app.run_pending_jobs())
-        await asyncio.to_thread(worker.started.wait, 1.0)
+        started = await asyncio.wait_for(asyncio.to_thread(worker.started.wait), timeout=5.0)
+        assert started, "Worker did not start within timeout"
         second = await app.run_pending_jobs()
         worker.release.set()
         return await first, second
 
-    first_result, second_result = asyncio.run(run_concurrently())
+    try:
+        first_result, second_result = asyncio.run(run_concurrently())
 
-    assert first_result is None
-    assert second_result is None
-    assert worker.calls == 1
+        assert first_result is None
+        assert second_result is None
+        assert worker.calls == 1
+    finally:
+        app.shutdown()
 
 
 def test_music_ingest_app_enqueue_release_uses_service_normalization(
@@ -100,10 +106,12 @@ def test_music_ingest_app_enqueue_release_uses_service_normalization(
         import_service=ImportService(connection),
         worker=FakeWorker(),
     )
+    try:
+        job = app.enqueue_release(
+            Path("/music/incoming/Artist/Album"),
+            "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789ABC",
+        )
 
-    job = app.enqueue_release(
-        Path("/music/incoming/Artist/Album"),
-        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789ABC",
-    )
-
-    assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
+        assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
+    finally:
+        app.shutdown()
