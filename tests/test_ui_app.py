@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+from music_ingest.config.schema import Settings
+from music_ingest.infra.db import open_db
+from music_ingest.services import ImportService
+from music_ingest.ui import MusicIngestApp
+
+
+class FakeWorker:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def run_next_pending(self) -> None:
+        self.calls += 1
+        return None
+
+
+@pytest.fixture
+def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    db = open_db(tmp_path / "app.db")
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def test_music_ingest_app_lists_incoming_albums_and_jobs(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    incoming_root = tmp_path / "incoming"
+    album_dir = incoming_root / "Artist" / "Album"
+    album_dir.mkdir(parents=True)
+    (album_dir / "01 - Track.flac").write_text("", encoding="utf-8")
+
+    settings = Settings()
+    settings.paths.incoming_root = incoming_root
+    service = ImportService(connection)
+    created_job = service.enqueue_as_is(album_dir)
+    app = MusicIngestApp(settings=settings, import_service=service, worker=FakeWorker())
+
+    albums = app.list_incoming_albums()
+    jobs = app.list_jobs()
+
+    assert [album.album_name for album in albums] == ["Album"]
+    assert jobs[0].id == created_job.id
+
+
+def test_music_ingest_app_runs_pending_jobs_without_reentry(
+    connection: sqlite3.Connection,
+) -> None:
+    worker = FakeWorker()
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=worker,
+    )
+
+    result = app.run_pending_jobs()
+
+    assert result is None
+    assert worker.calls == 1
