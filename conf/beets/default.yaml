@@ -1,0 +1,4 @@
+executable: beet
+beetsdir: /app/beets
+config_file: /app/beets/config.yaml
+timeout_seconds: 300

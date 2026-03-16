@@ -6,7 +6,11 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+  "hydra-core",
+  "omegaconf",
+  "rich",
+]
 
 authors = [{ name = "neodymium6" }]
 
