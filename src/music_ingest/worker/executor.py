@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import Protocol
 
 from music_ingest.domain import Job, JobMode, JobStatus
-from music_ingest.infra.beets_runner import BeetsRunner
 from music_ingest.infra.db import (
     fail_running_jobs,
     get_job,
@@ -15,8 +15,15 @@ from music_ingest.infra.db import (
 )
 
 
+class BeetsRunnerProtocol(Protocol):
+    def preview_as_is(self, album_dir): ...
+    def run_as_is(self, album_dir): ...
+    def preview_release(self, album_dir, release_ref): ...
+    def run_release(self, album_dir, release_ref): ...
+
+
 class ImportWorker:
-    def __init__(self, connection: sqlite3.Connection, beets_runner: BeetsRunner) -> None:
+    def __init__(self, connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> None:
         self._connection = connection
         self._beets_runner = beets_runner
 
@@ -76,7 +83,7 @@ class ImportWorker:
         return self._beets_runner.run_release(job.album_dir, _require_release_ref(job))
 
 
-def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunner) -> ImportWorker:
+def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> ImportWorker:
     worker = ImportWorker(connection, beets_runner)
     worker.reconcile_stale_jobs()
     return worker

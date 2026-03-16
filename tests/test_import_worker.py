@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import sqlite3
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+from music_ingest.domain import JobMode, JobStatus
+from music_ingest.infra.db import open_db, set_job_running
+from music_ingest.services.imports import DuplicateActiveJobError, ImportService
+from music_ingest.worker.executor import ImportWorker, start_worker
+
+
+class FakeBeetsRunner:
+    def __init__(
+        self,
+        *,
+        preview_returncode: int = 0,
+        preview_stdout: str = "",
+        preview_stderr: str = "",
+        run_returncode: int = 0,
+        run_stdout: str = "",
+        run_stderr: str = "",
+    ) -> None:
+        self.preview_result = subprocess.CompletedProcess(
+            ("beet", "import", "--pretend"), preview_returncode, preview_stdout, preview_stderr
+        )
+        self.run_result = subprocess.CompletedProcess(
+            ("beet", "import"), run_returncode, run_stdout, run_stderr
+        )
+        self.calls: list[tuple[str, Path, str | None]] = []
+
+    def preview_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("preview_as_is", album_dir, None))
+        return self.preview_result
+
+    def run_as_is(self, album_dir: Path) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("run_as_is", album_dir, None))
+        return self.run_result
+
+    def preview_release(
+        self, album_dir: Path, release_ref: str
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("preview_release", album_dir, release_ref))
+        return self.preview_result
+
+    def run_release(self, album_dir: Path, release_ref: str) -> subprocess.CompletedProcess[str]:
+        self.calls.append(("run_release", album_dir, release_ref))
+        return self.run_result
+
+
+@pytest.fixture
+def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    db = open_db(tmp_path / "app.db")
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def test_import_service_normalizes_release_ref_and_blocks_duplicate_active_jobs(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Unknown Artist/Unknown Album")
+
+    job = service.enqueue_release(
+        album_dir,
+        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789ABC",
+    )
+
+    assert job.mode is JobMode.RELEASE
+    assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
+
+    with pytest.raises(DuplicateActiveJobError):
+        service.enqueue_as_is(album_dir)
+
+
+def test_worker_marks_preview_failures_without_running_import(
+    connection: sqlite3.Connection,
+) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    runner = FakeBeetsRunner(
+        preview_returncode=1, preview_stdout="preview", preview_stderr="failed"
+    )
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.FAILED
+    assert result.preview_exit_code == 1
+    assert result.preview_stdout == "preview"
+    assert result.preview_stderr == "failed"
+    assert result.run_stdout is None
+    assert result.run_stderr is None
+    assert runner.calls == [("preview_as_is", Path("/music/incoming/Artist/Album"), None)]
+
+
+def test_start_worker_reconciles_stale_running_jobs(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_as_is(Path("/music/incoming/Artist/Album"))
+    set_job_running(connection, job.id)
+
+    worker = start_worker(connection, FakeBeetsRunner())
+    reconciled = service.get_job(job.id)
+
+    assert isinstance(worker, ImportWorker)
+    assert reconciled is not None
+    assert reconciled.status is JobStatus.FAILED
+    assert reconciled.run_stderr == "Application restarted before job completion"
+
+
+def test_worker_runs_release_job_after_successful_preview(connection: sqlite3.Connection) -> None:
+    service = ImportService(connection)
+    job = service.enqueue_release(
+        Path("/music/incoming/Unknown Artist/Unknown Album"),
+        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789ABC",
+    )
+    runner = FakeBeetsRunner(run_stdout="imported", run_stderr="")
+    worker = ImportWorker(connection, runner)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.id == job.id
+    assert result.status is JobStatus.SUCCEEDED
+    assert result.run_exit_code == 0
+    assert result.run_stdout == "imported"
+    assert runner.calls == [
+        (
+            "preview_release",
+            Path("/music/incoming/Unknown Artist/Unknown Album"),
+            "12345678-1234-1234-1234-123456789abc",
+        ),
+        (
+            "run_release",
+            Path("/music/incoming/Unknown Artist/Unknown Album"),
+            "12345678-1234-1234-1234-123456789abc",
+        ),
+    ]
