@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 import pytest
 
-from music_ingest.domain.enums import DuplicateAction
+from music_ingest.domain import DuplicateAction
 from music_ingest.infra import beets_runner as beets_runner_module
 from music_ingest.infra.beets_runner import BeetsRunner
 
