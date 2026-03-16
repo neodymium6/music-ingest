@@ -8,6 +8,7 @@ services:
       MUSIC_INGEST_CONF_DIR: /app/conf
       BEETSDIR: /app/beets
       TZ: UTC
+      MUSIC_INGEST_STORAGE_SECRET: ${MUSIC_INGEST_STORAGE_SECRET:?set MUSIC_INGEST_STORAGE_SECRET}
     volumes:
       - type: bind
         source: ./conf
