@@ -1,0 +1,10 @@
+directory: /music/library
+library: /app/data/beets.db
+
+import:
+  move: yes
+  write: yes
+
+paths:
+  default: $albumartist/$album%aunique{}/$track $title
+  singleton: Non-Album/$artist/$title
