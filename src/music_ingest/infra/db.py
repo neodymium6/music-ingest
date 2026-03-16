@@ -13,7 +13,7 @@ def open_db(path: str | Path, *, wal: bool = True) -> sqlite3.Connection:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    connection = sqlite3.connect(str(db_path), check_same_thread=False)
+    connection = sqlite3.connect(str(db_path))
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON;")
     connection.execute(f"PRAGMA journal_mode = {'WAL' if wal else 'DELETE'};")
@@ -260,8 +260,11 @@ def _update_job(
 ) -> None:
     with connection:
         cursor = connection.execute(statement, params)
-    if cursor.rowcount != 1:
-        raise LookupError(f"Job does not exist: {job_id}")
+    if cursor.rowcount == 1:
+        return
+    if cursor.rowcount == 0 and get_job(connection, job_id) is not None:
+        return
+    raise LookupError(f"Job does not exist: {job_id}")
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:

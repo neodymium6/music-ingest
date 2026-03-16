@@ -110,3 +110,20 @@ def test_job_repository_helpers_round_trip(connection: sqlite3.Connection) -> No
 
     listed = list_jobs(connection)
     assert [job.id for job in listed] == ["job-1"]
+
+
+def test_record_job_preview_allows_idempotent_updates(connection: sqlite3.Connection) -> None:
+    create_job(
+        connection,
+        job_id="job-1",
+        album_dir=Path("/music/incoming/Artist/Album"),
+        mode=JobMode.AS_IS,
+    )
+    set_job_running(connection, "job-1")
+
+    first = record_job_preview(connection, "job-1", exit_code=0, stdout="ok", stderr="")
+    second = record_job_preview(connection, "job-1", exit_code=0, stdout="ok", stderr="")
+
+    assert first.preview_exit_code == 0
+    assert second.preview_exit_code == 0
+    assert second.preview_stdout == "ok"
