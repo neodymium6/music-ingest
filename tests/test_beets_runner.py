@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
+from types import MappingProxyType
 
 import pytest
 
@@ -37,9 +37,9 @@ def test_build_preview_as_is_command_uses_expected_args_and_environment() -> Non
     assert command.env["BEETSDIR"] == "/app/beets"
     assert command.env["PATH"] == "/usr/bin"
 
-    mutable_env = cast(dict[str, str], command.env)
+    assert isinstance(command.env, MappingProxyType)
     with pytest.raises(TypeError):
-        mutable_env["PATH"] = "/bin"
+        command.env["PATH"] = "/bin"  # type: ignore[index]
 
 
 def test_build_run_as_is_command_uses_expected_args() -> None:
@@ -154,7 +154,7 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
 
     assert result.returncode == 0
     assert result.stdout == "preview ok"
-    command_env = cast(Mapping[str, str], captured["env"])
+    command_env = captured["env"]
     assert captured == {
         "argv": (
             "beet",
@@ -172,5 +172,6 @@ def test_preview_as_is_executes_with_fixed_subprocess_policy(monkeypatch) -> Non
         "text": True,
         "timeout": 45,
     }
+    assert isinstance(command_env, Mapping)
     assert command_env["PATH"] == "/usr/bin"
     assert command_env["BEETSDIR"] == "/app/beets"

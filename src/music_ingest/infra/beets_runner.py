@@ -28,14 +28,13 @@ class BeetsRunner:
         base_env: Mapping[str, str] | None = None,
     ) -> None:
         self._executable = executable
-        self._beetsdir = beetsdir
         self._config_file = config_file
         self._timeout_seconds = timeout_seconds
         self._cwd = working_directory or beetsdir
 
         env = os.environ.copy() if base_env is None else dict(base_env)
         env["BEETSDIR"] = str(beetsdir)
-        self._env = env
+        self._env = MappingProxyType(env)
 
     def build_preview_as_is(self, album_dir: Path) -> BeetsCommand:
         return self._build_command("import", "--pretend", "-A", str(album_dir))
@@ -80,6 +79,6 @@ class BeetsRunner:
         return BeetsCommand(
             argv=(self._executable, "-c", str(self._config_file), *args),
             cwd=self._cwd,
-            env=MappingProxyType(dict(self._env)),
+            env=self._env,
             timeout_seconds=self._timeout_seconds,
         )
