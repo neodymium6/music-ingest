@@ -8,6 +8,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
   "hydra-core",
+  "nicegui",
   "omegaconf",
   "rich",
 ]
