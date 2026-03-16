@@ -1,4 +1,2 @@
 incoming_root: /music/incoming
-library_root: /music/library
-data_root: /app/data
 logs_root: /app/data/logs

@@ -9,14 +9,11 @@ class AppConfig:
     host: str = "0.0.0.0"
     port: int = 8080
     title: str = "music-ingest"
-    workers: int = 1
 
 
 @dataclass(slots=True)
 class PathsConfig:
     incoming_root: Path = Path("/music/incoming")
-    library_root: Path = Path("/music/library")
-    data_root: Path = Path("/app/data")
     logs_root: Path = Path("/app/data/logs")
 
 

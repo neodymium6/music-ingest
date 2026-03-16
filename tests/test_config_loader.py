@@ -39,14 +39,11 @@ def test_load_settings_uses_env_conf_dir(monkeypatch: pytest.MonkeyPatch, tmp_pa
         encoding="utf-8",
     )
     (conf_dir / "app" / "base.yaml").write_text(
-        "host: 127.0.0.1\nport: 9090\ntitle: env-config\nworkers: 2\n",
+        "host: 127.0.0.1\nport: 9090\ntitle: env-config\n",
         encoding="utf-8",
     )
     (conf_dir / "paths" / "default.yaml").write_text(
-        "incoming_root: /tmp/incoming\n"
-        "library_root: /tmp/library\n"
-        "data_root: /tmp/data\n"
-        "logs_root: /tmp/logs\n",
+        "incoming_root: /tmp/incoming\n" "logs_root: /tmp/logs\n",
         encoding="utf-8",
     )
     (conf_dir / "db" / "sqlite.yaml").write_text("path: /tmp/app.db\nwal: true\n", encoding="utf-8")
