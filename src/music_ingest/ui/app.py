@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,11 +48,11 @@ class MusicIngestApp:
     def enqueue_release(self, album_dir: Path, release_ref: str) -> Job:
         return self.import_service.enqueue_release(album_dir, release_ref)
 
-    def run_pending_jobs(self) -> Job | None:
+    async def run_pending_jobs(self) -> Job | None:
         if not self._worker_lock.acquire(blocking=False):
             return None
         try:
-            return self.worker.run_next_pending()
+            return await asyncio.to_thread(self.worker.run_next_pending)
         except Exception:
             logger.exception("Failed while processing a queued import job")
             return None

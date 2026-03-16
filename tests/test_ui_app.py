@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -51,9 +52,7 @@ def test_music_ingest_app_lists_incoming_albums_and_jobs(
     assert jobs[0].id == created_job.id
 
 
-def test_music_ingest_app_runs_pending_jobs_without_reentry(
-    connection: sqlite3.Connection,
-) -> None:
+def test_music_ingest_app_runs_pending_jobs_without_reentry(connection: sqlite3.Connection) -> None:
     worker = FakeWorker()
     app = MusicIngestApp(
         settings=Settings(),
@@ -61,7 +60,7 @@ def test_music_ingest_app_runs_pending_jobs_without_reentry(
         worker=worker,
     )
 
-    result = app.run_pending_jobs()
+    result = asyncio.run(app.run_pending_jobs())
 
     assert result is None
     assert worker.calls == 1
