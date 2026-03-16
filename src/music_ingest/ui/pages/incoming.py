@@ -73,8 +73,6 @@ def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
                 ui.label(f"{album.track_count} FLAC tracks").classes("text-xs text-gray-500")
             ui.badge(f"{album.track_count} tracks", color="blue-grey").props("outline")
 
-        ui.separator()
-
         with ui.row().classes("w-full items-end gap-3 flex-wrap"):
             release_input = ui.input(
                 "MusicBrainz release URL or MBID",
