@@ -94,6 +94,22 @@ def test_import_service_normalizes_release_ref_and_blocks_duplicate_active_jobs(
         service.enqueue_as_is(album_dir)
 
 
+def test_import_service_reraises_unrelated_integrity_errors(
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = ImportService(connection)
+    album_dir = Path("/music/incoming/Artist/Album")
+    service.enqueue_as_is(album_dir)
+
+    def raise_unrelated_integrity_error(*_args: object, **_kwargs: object) -> None:
+        raise sqlite3.IntegrityError("CHECK constraint failed: jobs")
+
+    monkeypatch.setattr("music_ingest.services.imports.create_job", raise_unrelated_integrity_error)
+
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        service.enqueue_as_is(album_dir)
+
+
 def test_import_service_normalizes_release_url_host_case_and_port() -> None:
     normalized = normalize_release_ref(
         "https://MusicBrainz.org:443/release/12345678-1234-1234-1234-123456789ABC"

@@ -157,6 +157,8 @@ def claim_next_pending_job(
     except Exception:
         connection.rollback()
         raise
+    finally:
+        cursor.close()
 
     return _row_to_job(row) if row is not None else None
 
@@ -199,6 +201,8 @@ def claim_pending_job(
     except Exception:
         connection.rollback()
         raise
+    finally:
+        cursor.close()
 
     if row is None:
         raise LookupError(f"Job does not exist: {job_id}")

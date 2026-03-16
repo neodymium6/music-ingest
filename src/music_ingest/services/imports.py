@@ -14,6 +14,10 @@ _MBID_SEARCH_PATTERN = re.compile(
     r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 )
 _SUPPORTED_MB_HOSTS = {"musicbrainz.org", "beta.musicbrainz.org"}
+_ACTIVE_JOB_CONSTRAINT_MARKERS = (
+    "UNIQUE constraint failed: jobs.album_dir",
+    "idx_jobs_album_dir_pending_running",
+)
 
 
 class DuplicateActiveJobError(ValueError):
@@ -56,7 +60,9 @@ class ImportService:
                 release_ref=release_ref,
             )
         except sqlite3.IntegrityError as exc:
-            if get_active_job_for_album_dir(self._connection, album_dir) is not None:
+            if _is_active_job_constraint_error(exc) and (
+                get_active_job_for_album_dir(self._connection, album_dir) is not None
+            ):
                 raise DuplicateActiveJobError(album_dir) from exc
             raise
 
@@ -92,3 +98,8 @@ def normalize_release_ref(release_ref: str) -> str:
             "release_ref URL must contain a valid MusicBrainz release MBID"
         )
     return match.group(0).lower()
+
+
+def _is_active_job_constraint_error(exc: sqlite3.IntegrityError) -> bool:
+    message = str(exc)
+    return any(marker in message for marker in _ACTIVE_JOB_CONSTRAINT_MARKERS)
