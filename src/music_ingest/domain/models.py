@@ -32,4 +32,8 @@ class IncomingAlbum:
     relative_path: Path
     artist_name: str
     album_name: str
-    track_count: int
+    tracks: tuple[str, ...]
+
+    @property
+    def track_count(self) -> int:
+        return len(self.tracks)

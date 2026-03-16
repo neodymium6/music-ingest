@@ -49,6 +49,7 @@ def test_scan_incoming_albums_returns_sorted_album_summaries(tmp_path: Path) -> 
     assert [album.artist_name for album in albums] == ["A Artist", "B Artist"]
     assert [album.album_name for album in albums] == ["First Album", "Second Album"]
     assert [album.track_count for album in albums] == [2, 1]
+    assert albums[0].tracks == ("01.flac", "02.flac")
     assert albums[0].relative_path == Path("A Artist/First Album")
 
 

@@ -67,7 +67,15 @@ def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
         with ui.column().classes("gap-0.5"):
             ui.label(f"{album.artist_name} / {album.album_name}").classes("text-base font-semibold")
             ui.label(str(album.relative_path)).classes("text-xs text-gray-500 font-mono")
-            ui.label(f"{album.track_count} FLAC tracks").classes("text-xs text-gray-500")
+
+        with (
+            ui.expansion(f"{album.track_count} FLAC tracks", icon="audio_file").classes(
+                "w-full text-xs text-gray-500"
+            ),
+            ui.column().classes("gap-0.5 pl-2"),
+        ):
+            for track in album.tracks:
+                ui.label(track).classes("text-xs font-mono")
 
         with ui.row().classes("w-full items-center gap-3"):
             release_input = (

@@ -38,7 +38,7 @@ def summarize_album_dir(
         relative_path=relative_path,
         artist_name=relative_path.parts[0],
         album_name=relative_path.parts[1],
-        track_count=len(discovered_flac_files),
+        tracks=tuple(f.name for f in discovered_flac_files),
     )
 
 
