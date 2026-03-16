@@ -11,13 +11,21 @@ from music_ingest.infra.logging import setup_logging
 
 @pytest.fixture(autouse=True)
 def _cleanup_logging() -> Generator[None, None, None]:
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    original_disabled = root_logger.disabled
+    original_filters = list(root_logger.filters)
+    original_handlers = list(root_logger.handlers)
     try:
         yield
     finally:
-        root_logger = logging.getLogger()
         for handler in list(root_logger.handlers):
-            handler.close()
-            root_logger.removeHandler(handler)
+            if handler not in original_handlers:
+                handler.close()
+        root_logger.handlers = original_handlers
+        root_logger.filters = original_filters
+        root_logger.setLevel(original_level)
+        root_logger.disabled = original_disabled
 
 
 def test_setup_logging_without_logs_root_attaches_no_file_handler() -> None:
