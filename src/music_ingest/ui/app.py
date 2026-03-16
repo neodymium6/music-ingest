@@ -41,6 +41,12 @@ class MusicIngestApp:
     def list_jobs(self, *, limit: int = 100) -> list[Job]:
         return self.import_service.list_jobs(limit=limit)
 
+    def enqueue_as_is(self, album_dir: Path) -> Job:
+        return self.import_service.enqueue_as_is(album_dir)
+
+    def enqueue_release(self, album_dir: Path, release_ref: str) -> Job:
+        return self.import_service.enqueue_release(album_dir, release_ref)
+
     def run_pending_jobs(self) -> Job | None:
         if not self._worker_lock.acquire(blocking=False):
             return None

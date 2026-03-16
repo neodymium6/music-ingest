@@ -65,3 +65,20 @@ def test_music_ingest_app_runs_pending_jobs_without_reentry(
 
     assert result is None
     assert worker.calls == 1
+
+
+def test_music_ingest_app_enqueue_release_uses_service_normalization(
+    connection: sqlite3.Connection,
+) -> None:
+    app = MusicIngestApp(
+        settings=Settings(),
+        import_service=ImportService(connection),
+        worker=FakeWorker(),
+    )
+
+    job = app.enqueue_release(
+        Path("/music/incoming/Artist/Album"),
+        "https://musicbrainz.org/release/12345678-1234-1234-1234-123456789ABC",
+    )
+
+    assert job.release_ref == "12345678-1234-1234-1234-123456789abc"
