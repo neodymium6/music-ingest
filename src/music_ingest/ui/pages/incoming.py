@@ -57,29 +57,26 @@ def register_incoming_page(app: MusicIngestApp) -> None:
 
 def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
     with ui.card().classes("w-full gap-3"):
-        with (
-            ui.row().classes("w-full items-start justify-between gap-4"),
-            ui.column().classes("gap-1"),
-        ):
+        with ui.column().classes("gap-1"):
             ui.label(f"{album.artist_name} / {album.album_name}").classes("text-lg font-medium")
             ui.label(str(album.relative_path)).classes("text-sm text-slate-600")
             ui.label(f"{album.track_count} FLAC tracks").classes("text-sm text-slate-600")
 
-        with ui.row().classes("w-full items-center gap-2"):
+        with ui.row().classes("w-full items-end gap-2"):
+            release_input = ui.input("MusicBrainz release URL or MBID").classes("grow")
             duplicate_select = ui.select(
                 list(_DUPLICATE_ACTION_OPTIONS.keys()),
                 value="Abort",
                 label="If duplicate",
             ).classes("w-36")
+
+        with ui.row().classes("w-full justify-end gap-2"):
             ui.button(
                 "Import as-is",
                 on_click=lambda: _enqueue_as_is(
                     app, album, _DUPLICATE_ACTION_OPTIONS[duplicate_select.value]
                 ),
-            ).props("color=primary")
-
-        with ui.row().classes("w-full items-end gap-2"):
-            release_input = ui.input("MusicBrainz release URL or MBID").classes("grow")
+            ).props("outline")
             ui.button(
                 "Import with release URL",
                 on_click=lambda: _enqueue_release(
@@ -88,7 +85,7 @@ def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:
                     release_input.value,
                     _DUPLICATE_ACTION_OPTIONS[duplicate_select.value],
                 ),
-            ).props("outline")
+            ).props("color=primary")
 
 
 def _enqueue_as_is(
