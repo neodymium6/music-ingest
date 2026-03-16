@@ -1,9 +1,21 @@
 directory: /music/library
 library: /app/data/beets.db
 
+plugins:
+  - musicbrainz
+  - fetchart
+  - embedart
+
 import:
   move: yes
   write: yes
+
+fetchart:
+  auto: yes
+
+embedart:
+  auto: yes
+  ifempty: yes
 
 paths:
   default: $albumartist/$album%aunique{}/$track $title
