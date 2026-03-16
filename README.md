@@ -103,6 +103,34 @@ incoming/
 Each album card on the Incoming page shows the artist, album name, path, and an
 expandable list of FLAC filenames.
 
+## Architecture
+
+The app is an orchestration layer — Beets does the heavy lifting; the app handles
+job queuing, UI, and duplicate handling.
+
+```
+domain/    — frozen dataclasses (Job, IncomingAlbum) and enums (JobMode, JobStatus, DuplicateAction)
+infra/     — SQLite CRUD, BeetsRunner (subprocess wrapper), filesystem scanner, logging setup
+services/  — ImportService: job lifecycle, MusicBrainz MBID validation
+worker/    — ImportWorker: 2-phase execution (preview → run), duplicate keystroke injection
+ui/        — NiceGUI pages (Incoming, Jobs), shared header component
+```
+
+### Job Lifecycle
+
+```
+PENDING → RUNNING → SUCCEEDED
+                  → FAILED
+                  → SKIPPED   (preview exit code non-zero)
+```
+
+1. Job is enqueued with status `PENDING`
+2. Background worker picks it up and sets status to `RUNNING`
+3. Preview phase: `beet import --pretend ...` — if exit code is non-zero, job is set to `SKIPPED`
+4. Run phase: `beet import ...` — exit code 0 → `SUCCEEDED`, non-zero → `FAILED`
+
+Both stdout/stderr are stored in SQLite and shown on the Jobs page.
+
 ## Configuration
 
 The `conf/` directory uses [Hydra](https://hydra.cc/) for configuration composition.
