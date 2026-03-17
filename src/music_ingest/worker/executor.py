@@ -146,8 +146,12 @@ class ImportWorker:
         )
 
 
-def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> ImportWorker:
-    worker = ImportWorker(connection, beets_runner)
+def start_worker(
+    connection: sqlite3.Connection,
+    beets_runner: BeetsRunnerProtocol,
+    incoming_root: Path | None = None,
+) -> ImportWorker:
+    worker = ImportWorker(connection, beets_runner, incoming_root=incoming_root)
     worker.reconcile_stale_jobs()
     return worker
 
@@ -191,7 +195,15 @@ def _resolve_if_within(album_dir: Path, incoming_root: Path | None) -> Path | No
 
 
 def _delete_flac_files(album_dir: Path) -> None:
-    for flac_file in album_dir.iterdir():
+    try:
+        entries = list(album_dir.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        logger.info("Album directory not found when deleting FLACs: %s", album_dir)
+        return
+    except OSError:
+        logger.exception("Failed to list album directory when deleting FLACs: %s", album_dir)
+        return
+    for flac_file in entries:
         if flac_file.is_file() and flac_file.suffix.lower() == ".flac":
             try:
                 flac_file.unlink()
