@@ -391,6 +391,29 @@ def test_worker_does_not_remove_dirs_on_failure(
     assert artist_dir.exists()
 
 
+def test_worker_deletes_flac_files_and_dirs_when_skipped_as_duplicate(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    incoming_root = tmp_path / "incoming"
+    artist_dir = incoming_root / "Artist"
+    album_dir = artist_dir / "Album"
+    album_dir.mkdir(parents=True)
+    (album_dir / "01.flac").write_text("", encoding="utf-8")
+    (album_dir / "02.flac").write_text("", encoding="utf-8")
+
+    service = ImportService(connection)
+    service.enqueue_as_is(album_dir, DuplicateAction.SKIP)
+    runner = FakeBeetsRunner(run_stdout="This album is already in the library!\nSkipping.")
+    worker = ImportWorker(connection, runner, incoming_root=incoming_root)
+
+    result = worker.run_next_pending()
+
+    assert result is not None
+    assert result.status is JobStatus.SKIPPED
+    assert not album_dir.exists()
+    assert not artist_dir.exists()
+
+
 def test_worker_skips_cleanup_when_album_dir_outside_incoming_root(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:

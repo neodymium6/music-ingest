@@ -102,6 +102,11 @@ class ImportWorker:
                 and _BEETS_DUPLICATE_MARKER in stdout + stderr
             ):
                 logger.info("Job %s skipped (duplicate)", running_job.id)
+                if self._incoming_root is not None and running_job.album_dir.is_relative_to(
+                    self._incoming_root
+                ):
+                    _delete_flac_files(running_job.album_dir)
+                    _cleanup_empty_dirs(running_job.album_dir)
                 return set_job_skipped(
                     self._connection,
                     running_job.id,
@@ -176,6 +181,12 @@ class ThreadedImportWorker:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+
+
+def _delete_flac_files(album_dir: Path) -> None:
+    for flac_file in album_dir.glob("*.flac"):
+        flac_file.unlink()
+        logger.info("Deleted duplicate FLAC: %s", flac_file)
 
 
 def _cleanup_empty_dirs(album_dir: Path) -> None:
