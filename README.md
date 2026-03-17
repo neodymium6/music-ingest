@@ -48,7 +48,7 @@ Example:
 ```bash
 export MUSIC_INCOMING_DIR=/path/to/incoming
 export MUSIC_LIBRARY_DIR=/path/to/library
-export MUSIC_INGEST_STORAGE_SECRET=your-secret-key
+export MUSIC_INGEST_STORAGE_SECRET="$(openssl rand -hex 32)"
 docker compose up --build
 ```
 
@@ -123,13 +123,14 @@ ui/        — NiceGUI pages (Incoming, Jobs), shared header component
 ```
 PENDING → RUNNING → SUCCEEDED
                   → FAILED
-                  → SKIPPED   (preview exit code non-zero)
+                  → SKIPPED   (DuplicateAction.SKIP and album already in library)
 ```
 
 1. Job is enqueued with status `PENDING`
 2. Background worker picks it up and sets status to `RUNNING`
-3. Preview phase: `beet import --pretend ...` — if exit code is non-zero, job is set to `SKIPPED`
+3. Preview phase: `beet import --pretend ...` — if exit code is non-zero, job is set to `FAILED`
 4. Run phase: `beet import ...` — exit code 0 → `SUCCEEDED`, non-zero → `FAILED`
+5. If `DuplicateAction.SKIP` is selected and Beets reports the album is already in the library, the job is set to `SKIPPED`
 
 Both stdout/stderr are stored in SQLite and shown on the Jobs page.
 
