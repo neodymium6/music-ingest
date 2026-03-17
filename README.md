@@ -58,8 +58,10 @@ Then open `http://127.0.0.1:8080/`.
 directories are not. Because of that, local direct execution is not treated as a
 supported default runtime path yet; the current configuration is container-first.
 
-Optionally, set `TZ` to an IANA timezone name (e.g. `Europe/Berlin`) to use a
-local timezone for file log timestamps. Defaults to `UTC`.
+Optionally, set `TZ` to an IANA timezone name (e.g. `Europe/Berlin`) to control
+the timezone for both `docker compose logs` and file log timestamps. Defaults to `UTC`.
+The file log timezone can be overridden independently via `conf/logging/default.yaml`
+(`timezone` key).
 
 ## What The App Does
 
@@ -174,7 +176,7 @@ The active config directory is set via the `MUSIC_INGEST_CONF_DIR` environment v
 |---|---|---|
 | `level` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `rich_tracebacks` | `true` | Enable Rich-formatted tracebacks on console |
-| `timezone` | `UTC` | IANA timezone for file log timestamps (e.g. `Europe/Berlin`) |
+| `timezone` | `${oc.env:TZ,UTC}` | IANA timezone for file log timestamps; defaults to the `TZ` env var, falls back to `UTC` |
 
 ## Beets Responsibility
 

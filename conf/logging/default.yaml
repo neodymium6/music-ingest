@@ -1,3 +1,3 @@
 level: INFO
 rich_tracebacks: true
-timezone: UTC
+timezone: ${oc.env:TZ,UTC}
