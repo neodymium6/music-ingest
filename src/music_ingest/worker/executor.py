@@ -39,9 +39,15 @@ class BeetsRunnerProtocol(Protocol):
 
 
 class ImportWorker:
-    def __init__(self, connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        beets_runner: BeetsRunnerProtocol,
+        incoming_root: Path | None = None,
+    ) -> None:
         self._connection = connection
         self._beets_runner = beets_runner
+        self._incoming_root = incoming_root
 
     def reconcile_stale_jobs(self) -> int:
         return fail_running_jobs(self._connection)
@@ -104,7 +110,10 @@ class ImportWorker:
                     run_stderr=stderr,
                 )
             logger.info("Job %s succeeded", running_job.id)
-            _cleanup_empty_dirs(running_job.album_dir)
+            if self._incoming_root is None or running_job.album_dir.is_relative_to(
+                self._incoming_root
+            ):
+                _cleanup_empty_dirs(running_job.album_dir)
             return set_job_succeeded(
                 self._connection,
                 running_job.id,
@@ -156,7 +165,11 @@ class ThreadedImportWorker:
         return self._connection
 
     def run_next_pending(self) -> Job | None:
-        worker = ImportWorker(self._get_connection(), self._beets_runner)
+        worker = ImportWorker(
+            self._get_connection(),
+            self._beets_runner,
+            incoming_root=self._settings.paths.incoming_root,
+        )
         return worker.run_next_pending()
 
     def close(self) -> None:
@@ -170,6 +183,8 @@ def _cleanup_empty_dirs(album_dir: Path) -> None:
         try:
             dir_path.rmdir()
             logger.info("Removed empty directory: %s", dir_path)
+        except FileNotFoundError:
+            continue
         except OSError:
             break
 

@@ -386,6 +386,23 @@ def test_worker_does_not_remove_dirs_on_failure(
     assert artist_dir.exists()
 
 
+def test_worker_skips_cleanup_when_album_dir_outside_incoming_root(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    incoming_root = tmp_path / "incoming"
+    incoming_root.mkdir()
+    outside_dir = tmp_path / "other" / "Artist" / "Album"
+    outside_dir.mkdir(parents=True)
+
+    service = ImportService(connection)
+    service.enqueue_as_is(outside_dir)
+    worker = ImportWorker(connection, FakeBeetsRunner(), incoming_root=incoming_root)
+
+    worker.run_next_pending()
+
+    assert outside_dir.exists()
+
+
 def test_run_next_pending_claims_oldest_job_first(connection: sqlite3.Connection) -> None:
     created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     oldest = create_job(
