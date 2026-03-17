@@ -43,7 +43,18 @@ Before starting Docker Compose, set the following environment variables:
 - `MUSIC_LIBRARY_DIR`: host path for Beets library destination
 - `MUSIC_INGEST_STORAGE_SECRET`: secret key for browser session storage encryption
 
-Example:
+### Using the pre-built image (ghcr.io)
+
+A Docker image is published to the GitHub Container Registry on every push to `main`:
+
+```bash
+export MUSIC_INCOMING_DIR=/path/to/incoming
+export MUSIC_LIBRARY_DIR=/path/to/library
+export MUSIC_INGEST_STORAGE_SECRET="$(openssl rand -hex 32)"
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+### Building locally
 
 ```bash
 export MUSIC_INCOMING_DIR=/path/to/incoming
