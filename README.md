@@ -37,16 +37,18 @@ Runtime paths are environment-specific. The container expects these mount points
 - `/app/beets`
 - `/app/conf`
 
-Before starting Docker Compose, set host paths for:
+Before starting Docker Compose, set the following environment variables:
 
-- `MUSIC_INCOMING_DIR`
-- `MUSIC_LIBRARY_DIR`
+- `MUSIC_INCOMING_DIR`: host path for incoming albums
+- `MUSIC_LIBRARY_DIR`: host path for Beets library destination
+- `MUSIC_INGEST_STORAGE_SECRET`: secret key for browser session storage encryption
 
 Example:
 
 ```bash
 export MUSIC_INCOMING_DIR=/path/to/incoming
 export MUSIC_LIBRARY_DIR=/path/to/library
+export MUSIC_INGEST_STORAGE_SECRET="$(openssl rand -hex 32)"
 docker compose up --build
 ```
 
@@ -56,9 +58,14 @@ Then open `http://127.0.0.1:8080/`.
 directories are not. Because of that, local direct execution is not treated as a
 supported default runtime path yet; the current configuration is container-first.
 
+Optionally, set `TZ` to an IANA timezone name (e.g. `Europe/Berlin`) to control
+the timezone for both `docker compose logs` and file log timestamps. Defaults to `UTC`.
+The file log timezone can be overridden independently via `conf/logging/default.yaml`
+(`timezone` key).
+
 ## What The App Does
 
-The UI exposes two import actions:
+The UI exposes two import actions on the **Incoming** page (`/`):
 
 - `Import as-is`
 - `Import with release URL`
@@ -70,7 +77,13 @@ the source of truth.
 release MBID. The worker first runs `beet import --pretend --search-id ...` and
 then runs the real import if preview succeeds.
 
-Preview and run output are stored in SQLite and shown on the `/jobs` page.
+Both actions accept a **duplicate handling** option: `Abort` (default), `Skip new`,
+or `Remove old`.
+
+Preview and run output are stored in SQLite and shown on the **Jobs** page (`/jobs`).
+
+The UI defaults to dark mode. The toggle in the header persists the preference
+across sessions per browser.
 
 ## Incoming Layout
 
@@ -88,6 +101,83 @@ incoming/
       01 - Track.flac
       02 - Track.flac
 ```
+
+Each album card on the Incoming page shows the artist, album name, path, and an
+expandable list of FLAC filenames.
+
+## Architecture
+
+The app is an orchestration layer — Beets does the heavy lifting; the app handles
+job queuing, UI, and duplicate handling.
+
+```
+domain/    — frozen dataclasses (Job, IncomingAlbum) and enums (JobMode, JobStatus, DuplicateAction)
+infra/     — SQLite CRUD, BeetsRunner (subprocess wrapper), filesystem scanner, logging setup
+services/  — ImportService: job lifecycle, MusicBrainz MBID validation
+worker/    — ImportWorker: 2-phase execution (preview → run), duplicate keystroke injection
+ui/        — NiceGUI pages (Incoming, Jobs), shared header component
+```
+
+### Job Lifecycle
+
+```
+PENDING → RUNNING → SUCCEEDED
+                  → FAILED
+                  → SKIPPED   (DuplicateAction.SKIP and album already in library)
+```
+
+1. Job is enqueued with status `PENDING`
+2. Background worker picks it up and sets status to `RUNNING`
+3. Preview phase: `beet import --pretend ...` — if exit code is non-zero, job is set to `FAILED`
+4. Run phase: `beet import ...` — exit code 0 → `SUCCEEDED`, non-zero → `FAILED`
+5. If `DuplicateAction.SKIP` is selected and Beets reports the album is already in the library, the job is set to `SKIPPED`
+
+Both stdout/stderr are stored in SQLite and shown on the Jobs page.
+
+## Configuration
+
+The `conf/` directory uses [Hydra](https://hydra.cc/) for configuration composition.
+The active config directory is set via the `MUSIC_INGEST_CONF_DIR` environment variable
+(defaults to `./conf`).
+
+### `conf/app/base.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `host` | `0.0.0.0` | Host address the web server binds to |
+| `port` | `8080` | Port the web server listens on |
+| `title` | `music-ingest` | App title shown in the browser tab and header |
+
+### `conf/paths/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `incoming_root` | `/music/incoming` | Root directory scanned for incoming albums |
+| `logs_root` | `/app/data/logs` | Directory where rotating log files are written |
+
+### `conf/db/sqlite.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `path` | `/app/data/app.db` | Path to the SQLite job database |
+| `wal` | `true` | Enable WAL mode for better concurrent access |
+
+### `conf/beets/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `executable` | `beet` | Beets CLI command name or absolute path |
+| `beetsdir` | `/app/beets` | Beets state directory (passed as `BEETSDIR`) |
+| `config_file` | `/app/beets/config.yaml` | Beets configuration file path |
+| `timeout_seconds` | `300` | Timeout for a single beet subprocess call |
+
+### `conf/logging/default.yaml`
+
+| Key | Default | Description |
+|---|---|---|
+| `level` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `rich_tracebacks` | `true` | Enable Rich-formatted tracebacks on console |
+| `timezone` | `${oc.env:TZ,UTC}` | IANA timezone for file log timestamps; defaults to the `TZ` env var, falls back to `UTC` |
 
 ## Beets Responsibility
 
@@ -109,6 +199,7 @@ The Compose setup persists application state in `data/`.
 
 - `data/app.db`: app job database
 - `data/beets.db`: Beets library database
+- `data/logs/app.log`: rotating file log (max 10 MB, 5 backups)
 
 The `/jobs` page is the primary place to inspect failures. It shows:
 
