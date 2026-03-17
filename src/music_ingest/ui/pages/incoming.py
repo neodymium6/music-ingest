@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nicegui import ui
@@ -35,18 +34,17 @@ def register_incoming_page(app: MusicIngestApp) -> None:
             ui.label(f"Scan root: {app.incoming_root}").classes("text-sm text-gray-500")
 
             list_container = ui.column().classes("w-full gap-8")
-            rendered_dirs: list[Path] = []
+            rendered_albums: list[IncomingAlbum] = []
 
             def refresh_albums() -> None:
                 albums = app.list_incoming_albums()
-                current_dirs = [a.album_dir for a in albums]
                 status.set_text(f"{len(albums)} found")
 
-                if current_dirs == rendered_dirs:
+                if albums == rendered_albums:
                     return
 
-                rendered_dirs.clear()
-                rendered_dirs.extend(current_dirs)
+                rendered_albums.clear()
+                rendered_albums.extend(albums)
                 list_container.clear()
                 with list_container:
                     if not albums:
