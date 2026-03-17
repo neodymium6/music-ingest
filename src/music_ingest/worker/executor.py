@@ -110,7 +110,7 @@ class ImportWorker:
                     run_stderr=stderr,
                 )
             logger.info("Job %s succeeded", running_job.id)
-            if self._incoming_root is None or running_job.album_dir.is_relative_to(
+            if self._incoming_root is not None and running_job.album_dir.is_relative_to(
                 self._incoming_root
             ):
                 _cleanup_empty_dirs(running_job.album_dir)

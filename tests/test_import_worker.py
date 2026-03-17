@@ -337,13 +337,14 @@ def test_worker_succeeds_on_remove_action_even_with_duplicate_marker(
 def test_worker_removes_empty_album_and_artist_dirs_after_success(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    artist_dir = tmp_path / "Artist"
+    incoming_root = tmp_path / "incoming"
+    artist_dir = incoming_root / "Artist"
     album_dir = artist_dir / "Album"
     album_dir.mkdir(parents=True)
 
     service = ImportService(connection)
     service.enqueue_as_is(album_dir)
-    worker = ImportWorker(connection, FakeBeetsRunner())
+    worker = ImportWorker(connection, FakeBeetsRunner(), incoming_root=incoming_root)
 
     worker.run_next_pending()
 
@@ -354,14 +355,15 @@ def test_worker_removes_empty_album_and_artist_dirs_after_success(
 def test_worker_keeps_artist_dir_if_other_albums_remain(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    artist_dir = tmp_path / "Artist"
+    incoming_root = tmp_path / "incoming"
+    artist_dir = incoming_root / "Artist"
     album_dir = artist_dir / "Album"
     album_dir.mkdir(parents=True)
     (artist_dir / "Other Album").mkdir()
 
     service = ImportService(connection)
     service.enqueue_as_is(album_dir)
-    worker = ImportWorker(connection, FakeBeetsRunner())
+    worker = ImportWorker(connection, FakeBeetsRunner(), incoming_root=incoming_root)
 
     worker.run_next_pending()
 
@@ -372,13 +374,16 @@ def test_worker_keeps_artist_dir_if_other_albums_remain(
 def test_worker_does_not_remove_dirs_on_failure(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    artist_dir = tmp_path / "Artist"
+    incoming_root = tmp_path / "incoming"
+    artist_dir = incoming_root / "Artist"
     album_dir = artist_dir / "Album"
     album_dir.mkdir(parents=True)
 
     service = ImportService(connection)
     service.enqueue_as_is(album_dir)
-    worker = ImportWorker(connection, FakeBeetsRunner(run_returncode=1))
+    worker = ImportWorker(
+        connection, FakeBeetsRunner(run_returncode=1), incoming_root=incoming_root
+    )
 
     worker.run_next_pending()
 
