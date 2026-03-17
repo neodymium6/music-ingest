@@ -67,7 +67,8 @@ def register_incoming_page(app: MusicIngestApp) -> None:
                     "outline no-caps"
                 )
 
-            ui.timer(1.0, refresh_albums)
+            timer = ui.timer(1.0, refresh_albums)
+            ui.context.client.on_disconnect(lambda: timer.cancel())
             refresh_albums()
 
 
