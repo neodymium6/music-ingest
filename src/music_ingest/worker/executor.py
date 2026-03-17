@@ -103,27 +103,29 @@ class ImportWorker:
             ):
                 logger.info("Job %s skipped (duplicate)", running_job.id)
                 album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
-                if album_dir is not None:
-                    _delete_flac_files(album_dir)
-                    _cleanup_empty_dirs(album_dir)
-                return set_job_skipped(
+                job = set_job_skipped(
                     self._connection,
                     running_job.id,
                     run_exit_code=run.returncode,
                     run_stdout=stdout,
                     run_stderr=stderr,
                 )
+                if album_dir is not None:
+                    _delete_flac_files(album_dir)
+                    _cleanup_empty_dirs(album_dir)
+                return job
             logger.info("Job %s succeeded", running_job.id)
             album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
-            if album_dir is not None:
-                _cleanup_empty_dirs(album_dir)
-            return set_job_succeeded(
+            job = set_job_succeeded(
                 self._connection,
                 running_job.id,
                 run_exit_code=run.returncode,
                 run_stdout=stdout,
                 run_stderr=stderr,
             )
+            if album_dir is not None:
+                _cleanup_empty_dirs(album_dir)
+            return job
         logger.warning("Job %s failed (exit %d)", running_job.id, run.returncode)
         return set_job_failed(
             self._connection,
@@ -188,8 +190,13 @@ class ThreadedImportWorker:
 def _resolve_if_within(album_dir: Path, incoming_root: Path | None) -> Path | None:
     if incoming_root is None:
         return None
-    resolved = album_dir.resolve()
-    if resolved.is_relative_to(incoming_root.resolve()):
+    try:
+        resolved = album_dir.resolve()
+        resolved_root = incoming_root.resolve()
+    except (OSError, RuntimeError):
+        logger.exception("Failed to resolve paths for cleanup: %s, %s", album_dir, incoming_root)
+        return None
+    if resolved.is_relative_to(resolved_root):
         return resolved
     return None
 
