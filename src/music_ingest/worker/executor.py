@@ -112,7 +112,7 @@ class ImportWorker:
                 )
                 if album_dir is not None:
                     _delete_flac_files(album_dir)
-                    _cleanup_empty_dirs(album_dir)
+                    _cleanup_empty_dirs(album_dir, self._incoming_root)
                 return job
             logger.info("Job %s succeeded", running_job.id)
             album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
@@ -124,7 +124,7 @@ class ImportWorker:
                 run_stderr=stderr,
             )
             if album_dir is not None:
-                _cleanup_empty_dirs(album_dir)
+                _cleanup_empty_dirs(album_dir, self._incoming_root)
             return job
         logger.warning("Job %s failed (exit %d)", running_job.id, run.returncode)
         return set_job_failed(
@@ -219,8 +219,16 @@ def _delete_flac_files(album_dir: Path) -> None:
                 logger.exception("Failed to delete duplicate FLAC: %s", flac_file)
 
 
-def _cleanup_empty_dirs(album_dir: Path) -> None:
+def _cleanup_empty_dirs(album_dir: Path, incoming_root: Path | None = None) -> None:
+    stop_at: Path | None = None
+    if incoming_root is not None:
+        try:
+            stop_at = incoming_root.resolve()
+        except (OSError, RuntimeError):
+            logger.exception("Failed to resolve incoming_root for cleanup guard: %s", incoming_root)
     for dir_path in (album_dir, album_dir.parent):
+        if stop_at is not None and dir_path == stop_at:
+            break
         try:
             dir_path.rmdir()
             logger.info("Removed empty directory: %s", dir_path)
