@@ -34,11 +34,17 @@ def register_incoming_page(app: MusicIngestApp) -> None:
             ui.label(f"Scan root: {app.incoming_root}").classes("text-sm text-gray-500")
 
             list_container = ui.column().classes("w-full gap-8")
+            rendered_albums: list[IncomingAlbum] = []
 
             def refresh_albums() -> None:
                 albums = app.list_incoming_albums()
                 status.set_text(f"{len(albums)} found")
 
+                if albums == rendered_albums:
+                    return
+
+                rendered_albums.clear()
+                rendered_albums.extend(albums)
                 list_container.clear()
                 with list_container:
                     if not albums:
@@ -59,7 +65,9 @@ def register_incoming_page(app: MusicIngestApp) -> None:
                     "outline no-caps"
                 )
 
-            refresh_albums()
+        timer = ui.timer(1.0, refresh_albums)
+        ui.context.client.on_disconnect(lambda: timer.cancel())
+        refresh_albums()
 
 
 def _render_album_card(app: MusicIngestApp, album: IncomingAlbum) -> None:

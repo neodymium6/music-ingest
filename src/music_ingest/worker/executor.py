@@ -39,9 +39,15 @@ class BeetsRunnerProtocol(Protocol):
 
 
 class ImportWorker:
-    def __init__(self, connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        beets_runner: BeetsRunnerProtocol,
+        incoming_root: Path | None = None,
+    ) -> None:
         self._connection = connection
         self._beets_runner = beets_runner
+        self._incoming_root = incoming_root
 
     def reconcile_stale_jobs(self) -> int:
         return fail_running_jobs(self._connection)
@@ -96,21 +102,30 @@ class ImportWorker:
                 and _BEETS_DUPLICATE_MARKER in stdout + stderr
             ):
                 logger.info("Job %s skipped (duplicate)", running_job.id)
-                return set_job_skipped(
+                album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
+                job = set_job_skipped(
                     self._connection,
                     running_job.id,
                     run_exit_code=run.returncode,
                     run_stdout=stdout,
                     run_stderr=stderr,
                 )
+                if album_dir is not None:
+                    _delete_flac_files(album_dir)
+                    _cleanup_empty_dirs(album_dir, self._incoming_root)
+                return job
             logger.info("Job %s succeeded", running_job.id)
-            return set_job_succeeded(
+            album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
+            job = set_job_succeeded(
                 self._connection,
                 running_job.id,
                 run_exit_code=run.returncode,
                 run_stdout=stdout,
                 run_stderr=stderr,
             )
+            if album_dir is not None:
+                _cleanup_empty_dirs(album_dir, self._incoming_root)
+            return job
         logger.warning("Job %s failed (exit %d)", running_job.id, run.returncode)
         return set_job_failed(
             self._connection,
@@ -133,8 +148,12 @@ class ImportWorker:
         )
 
 
-def start_worker(connection: sqlite3.Connection, beets_runner: BeetsRunnerProtocol) -> ImportWorker:
-    worker = ImportWorker(connection, beets_runner)
+def start_worker(
+    connection: sqlite3.Connection,
+    beets_runner: BeetsRunnerProtocol,
+    incoming_root: Path | None = None,
+) -> ImportWorker:
+    worker = ImportWorker(connection, beets_runner, incoming_root=incoming_root)
     worker.reconcile_stale_jobs()
     return worker
 
@@ -155,13 +174,68 @@ class ThreadedImportWorker:
         return self._connection
 
     def run_next_pending(self) -> Job | None:
-        worker = ImportWorker(self._get_connection(), self._beets_runner)
+        worker = ImportWorker(
+            self._get_connection(),
+            self._beets_runner,
+            incoming_root=self._settings.paths.incoming_root,
+        )
         return worker.run_next_pending()
 
     def close(self) -> None:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+
+
+def _resolve_if_within(album_dir: Path, incoming_root: Path | None) -> Path | None:
+    if incoming_root is None:
+        return None
+    try:
+        resolved = album_dir.resolve()
+        resolved_root = incoming_root.resolve()
+    except (OSError, RuntimeError):
+        logger.exception("Failed to resolve paths for cleanup: %s, %s", album_dir, incoming_root)
+        return None
+    if resolved.is_relative_to(resolved_root):
+        return resolved
+    return None
+
+
+def _delete_flac_files(album_dir: Path) -> None:
+    try:
+        entries = list(album_dir.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        logger.info("Album directory not found when deleting FLACs: %s", album_dir)
+        return
+    except OSError:
+        logger.exception("Failed to list album directory when deleting FLACs: %s", album_dir)
+        return
+    for flac_file in entries:
+        if flac_file.is_file() and flac_file.suffix.lower() == ".flac":
+            try:
+                flac_file.unlink()
+                logger.info("Deleted duplicate FLAC: %s", flac_file)
+            except OSError:
+                logger.exception("Failed to delete duplicate FLAC: %s", flac_file)
+
+
+def _cleanup_empty_dirs(album_dir: Path, incoming_root: Path | None = None) -> None:
+    stop_at: Path | None = None
+    if incoming_root is not None:
+        try:
+            stop_at = incoming_root.resolve()
+        except (OSError, RuntimeError):
+            logger.exception("Failed to resolve incoming_root for cleanup guard: %s", incoming_root)
+    for dir_path in (album_dir, album_dir.parent):
+        if stop_at is not None and dir_path == stop_at:
+            break
+        try:
+            dir_path.rmdir()
+            logger.info("Removed empty directory: %s", dir_path)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            break
 
 
 def _require_release_ref(job: Job) -> str:
