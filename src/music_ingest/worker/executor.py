@@ -102,11 +102,10 @@ class ImportWorker:
                 and _BEETS_DUPLICATE_MARKER in stdout + stderr
             ):
                 logger.info("Job %s skipped (duplicate)", running_job.id)
-                if self._incoming_root is not None and running_job.album_dir.is_relative_to(
-                    self._incoming_root
-                ):
-                    _delete_flac_files(running_job.album_dir)
-                    _cleanup_empty_dirs(running_job.album_dir)
+                album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
+                if album_dir is not None:
+                    _delete_flac_files(album_dir)
+                    _cleanup_empty_dirs(album_dir)
                 return set_job_skipped(
                     self._connection,
                     running_job.id,
@@ -115,10 +114,9 @@ class ImportWorker:
                     run_stderr=stderr,
                 )
             logger.info("Job %s succeeded", running_job.id)
-            if self._incoming_root is not None and running_job.album_dir.is_relative_to(
-                self._incoming_root
-            ):
-                _cleanup_empty_dirs(running_job.album_dir)
+            album_dir = _resolve_if_within(running_job.album_dir, self._incoming_root)
+            if album_dir is not None:
+                _cleanup_empty_dirs(album_dir)
             return set_job_succeeded(
                 self._connection,
                 running_job.id,
@@ -183,10 +181,23 @@ class ThreadedImportWorker:
             self._connection = None
 
 
+def _resolve_if_within(album_dir: Path, incoming_root: Path | None) -> Path | None:
+    if incoming_root is None:
+        return None
+    resolved = album_dir.resolve()
+    if resolved.is_relative_to(incoming_root.resolve()):
+        return resolved
+    return None
+
+
 def _delete_flac_files(album_dir: Path) -> None:
-    for flac_file in album_dir.glob("*.flac"):
-        flac_file.unlink()
-        logger.info("Deleted duplicate FLAC: %s", flac_file)
+    for flac_file in album_dir.iterdir():
+        if flac_file.is_file() and flac_file.suffix.lower() == ".flac":
+            try:
+                flac_file.unlink()
+                logger.info("Deleted duplicate FLAC: %s", flac_file)
+            except OSError:
+                logger.exception("Failed to delete duplicate FLAC: %s", flac_file)
 
 
 def _cleanup_empty_dirs(album_dir: Path) -> None:

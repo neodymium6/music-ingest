@@ -385,8 +385,10 @@ def test_worker_does_not_remove_dirs_on_failure(
         connection, FakeBeetsRunner(run_returncode=1), incoming_root=incoming_root
     )
 
-    worker.run_next_pending()
+    result = worker.run_next_pending()
 
+    assert result is not None
+    assert result.status is JobStatus.FAILED
     assert album_dir.exists()
     assert artist_dir.exists()
 
