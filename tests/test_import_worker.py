@@ -334,6 +334,58 @@ def test_worker_succeeds_on_remove_action_even_with_duplicate_marker(
     assert result.status is JobStatus.SUCCEEDED
 
 
+def test_worker_removes_empty_album_and_artist_dirs_after_success(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    artist_dir = tmp_path / "Artist"
+    album_dir = artist_dir / "Album"
+    album_dir.mkdir(parents=True)
+
+    service = ImportService(connection)
+    service.enqueue_as_is(album_dir)
+    worker = ImportWorker(connection, FakeBeetsRunner())
+
+    worker.run_next_pending()
+
+    assert not album_dir.exists()
+    assert not artist_dir.exists()
+
+
+def test_worker_keeps_artist_dir_if_other_albums_remain(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    artist_dir = tmp_path / "Artist"
+    album_dir = artist_dir / "Album"
+    album_dir.mkdir(parents=True)
+    (artist_dir / "Other Album").mkdir()
+
+    service = ImportService(connection)
+    service.enqueue_as_is(album_dir)
+    worker = ImportWorker(connection, FakeBeetsRunner())
+
+    worker.run_next_pending()
+
+    assert not album_dir.exists()
+    assert artist_dir.exists()
+
+
+def test_worker_does_not_remove_dirs_on_failure(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    artist_dir = tmp_path / "Artist"
+    album_dir = artist_dir / "Album"
+    album_dir.mkdir(parents=True)
+
+    service = ImportService(connection)
+    service.enqueue_as_is(album_dir)
+    worker = ImportWorker(connection, FakeBeetsRunner(run_returncode=1))
+
+    worker.run_next_pending()
+
+    assert album_dir.exists()
+    assert artist_dir.exists()
+
+
 def test_run_next_pending_claims_oldest_job_first(connection: sqlite3.Connection) -> None:
     created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     oldest = create_job(

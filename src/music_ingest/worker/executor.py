@@ -104,6 +104,7 @@ class ImportWorker:
                     run_stderr=stderr,
                 )
             logger.info("Job %s succeeded", running_job.id)
+            _cleanup_empty_dirs(running_job.album_dir)
             return set_job_succeeded(
                 self._connection,
                 running_job.id,
@@ -162,6 +163,15 @@ class ThreadedImportWorker:
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+
+
+def _cleanup_empty_dirs(album_dir: Path) -> None:
+    for dir_path in (album_dir, album_dir.parent):
+        try:
+            dir_path.rmdir()
+            logger.info("Removed empty directory: %s", dir_path)
+        except OSError:
+            break
 
 
 def _require_release_ref(job: Job) -> str:
